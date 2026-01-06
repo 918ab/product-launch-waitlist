@@ -1,33 +1,13 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import { ThemeProvider } from "@/components/theme-provider"
+import { ConditionalFooter } from "./components/conditional-footer" 
 import "./globals.css"
-
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "배문환 영어 연구소",
-  description: "체계적인 영어 학습 시스템으로 여러분의 영어 실력 향상을 도와드립니다.",
-  generator: "v0.app",
-  icons: {
-    icon: [
-      {
-        url: "/icon-light-32x32.png",
-        media: "(prefers-color-scheme: light)",
-      },
-      {
-        url: "/icon-dark-32x32.png",
-        media: "(prefers-color-scheme: dark)",
-      },
-      {
-        url: "/icon.svg",
-        type: "image/svg+xml",
-      },
-    ],
-    apple: "/apple-icon.png",
-  },
+  description: "체계적인 영어 학습 시스템",
 }
 
 export default function RootLayout({
@@ -36,10 +16,20 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
       <body className={`font-sans antialiased`}>
-        {children}
-        <Analytics />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          
+          <ConditionalFooter />
+          
+          <Analytics />
+        </ThemeProvider>
       </body>
     </html>
   )

@@ -28,30 +28,24 @@ const backgroundStyle = `
 export default function Home() {
   return (
     <main
-      className="min-h-screen"
+      className="min-h-screen text-white selection:bg-blue-500/30"
       style={{
-        background: "radial-gradient(circle at center, #1E40AF, #000000)",
+        background: "radial-gradient(circle at center, #111827, #000000)", // 더 깊은 다크 배경 적용
       }}
     >
       <style jsx global>
         {backgroundStyle}
       </style>
       <div className="bg-pattern"></div>
+      
+      <div className="fixed top-20 left-10 w-72 h-72 bg-blue-600/20 rounded-full blur-[100px] pointer-events-none" />
+      <div className="fixed bottom-20 right-10 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none" />
+
       <div className="content w-full">
         <Header isLoggedIn={false} />
         <MainHero />
       </div>
-      <Toaster
-        toastOptions={{
-          style: {
-            background: "rgb(23 23 23)",
-            color: "white",
-            border: "1px solid rgb(63 63 70)",
-          },
-          className: "rounded-xl",
-          duration: 5000,
-        }}
-      />
+      <Toaster />
     </main>
   )
 }

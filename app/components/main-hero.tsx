@@ -32,8 +32,8 @@ export function MainHero() {
         <Link href="/login" className="flex-1">
           <Button
             size="lg"
-            variant="outline"
-            className="w-full border-white/30 text-white hover:bg-white/10 font-semibold px-8 py-6 rounded-xl text-base bg-transparent"
+            // 변경된 부분: variant="outline" 제거하고 직접 스타일 지정하여 가시성 높임
+            className="w-full bg-white/10 border border-white/50 text-white hover:bg-white/20 font-semibold px-8 py-6 rounded-xl text-base backdrop-blur-sm transition-all"
           >
             로그인
           </Button>

@@ -1,8 +1,13 @@
 "use client"
 
+import Image from "next/image"
+import Link from "next/link"
 import { Header } from "../components/header"
 import { Toaster } from "@/components/ui/toaster"
+import { Button } from "@/components/ui/button"
+import { Download, Mail, Youtube, Instagram, ExternalLink } from "lucide-react"
 
+// 배경 패턴 스타일 (다시 복구)
 const backgroundStyle = `
   .bg-pattern {
     position: fixed;
@@ -27,109 +32,93 @@ const backgroundStyle = `
 export default function AboutPage() {
   return (
     <main
-      className="min-h-screen"
+      className="min-h-screen text-white selection:bg-blue-500/30"
       style={{
-        background: "radial-gradient(circle at center, #1E40AF, #000000)",
+        background: "radial-gradient(circle at center, #111827, #000000)", // 더 깊은 다크 배경
       }}
     >
       <style jsx global>
         {backgroundStyle}
       </style>
       <div className="bg-pattern"></div>
+      
+      {/* 배경에 은은한 오로라 효과 추가 */}
+      <div className="fixed top-20 left-10 w-72 h-72 bg-blue-600/20 rounded-full blur-[100px] pointer-events-none" />
+      <div className="fixed bottom-20 right-10 w-96 h-96 bg-purple-600/10 rounded-full blur-[100px] pointer-events-none" />
+
       <div className="content w-full">
+        {/* 헤더 (로그인 상태 X) */}
         <Header isLoggedIn={false} />
 
-        <div className="min-h-screen pt-28 pb-12 px-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-12">
-              <h1 className="text-4xl font-bold text-white mb-4">강사 소개</h1>
-              <p className="text-gray-400">배문환 영어 연구소를 이끌어가는 강사를 소개합니다</p>
-            </div>
-
-            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 ring-1 ring-white/10">
-              <div className="flex flex-col md:flex-row gap-8 items-center md:items-start">
-                {/* Instructor Photo */}
-                <div className="flex-shrink-0">
-                  <div className="w-48 h-48 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
-                    <span className="text-6xl font-bold text-white">배</span>
-                  </div>
+        <div className="min-h-screen flex items-center justify-center px-6 py-20">
+          <div className="max-w-6xl w-full mx-auto">
+            
+            <div className="flex flex-col-reverse lg:flex-row items-center justify-between gap-12 lg:gap-20">
+              
+              {/* 1. 왼쪽: 텍스트 정보 영역 */}
+              <div className="flex-1 space-y-8 text-center lg:text-left">
+                <div>
+                  <h1 className="text-5xl lg:text-7xl font-extrabold tracking-tight text-white mb-4 drop-shadow-2xl">
+                    배문환
+                  </h1>
+                  <h2 className="text-2xl lg:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-6">
+                    영어 연구소 대표 강사
+                  </h2>
+                  <p className="text-lg text-gray-300 leading-relaxed max-w-2xl mx-auto lg:mx-0">
+                    학생들의 영어 실력 향상을 위해 끊임없이 연구하고 가르칩니다. <br className="hidden lg:block" />
+                    단순한 암기가 아닌, 실제로 사용할 수 있는 살아있는 영어를 목표로 합니다.
+                    체계적인 커리큘럼과 맞춤형 자료로 여러분의 성장을 돕겠습니다.
+                  </p>
                 </div>
 
-                {/* Instructor Info */}
-                <div className="flex-1 text-center md:text-left">
-                  <h2 className="text-2xl font-bold text-white mb-2">배문환</h2>
-                  <p className="text-blue-400 font-medium mb-4">배문환 영어 연구소 대표 강사</p>
+                {/* 버튼 그룹 (다크 모드 스타일) */}
+                <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
+                  <Link href="/qna">
+                    <Button className="h-12 px-8 text-lg font-semibold bg-white text-slate-900 hover:bg-gray-200 rounded-full transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+                      문의하기
+                    </Button>
+                  </Link>
+                  <Link href="/dashboard/videos">
+                    <Button variant="outline" className="h-12 px-8 text-lg font-semibold border-white/20 bg-white/5 text-white hover:bg-white/10 hover:border-white/40 rounded-full backdrop-blur-sm transition-all">
+                      강의 보기
+                    </Button>
+                  </Link>
 
-                  <div className="space-y-4 text-gray-300 leading-relaxed">
-                    <p>
-                      안녕하세요, 배문환입니다. 오랜 시간 영어 교육에 헌신하며 학생들의 영어 실력 향상을 위해 최선을
-                      다하고 있습니다.
-                    </p>
-                    <p>
-                      체계적인 학습 방법과 효율적인 복습 시스템을 통해 학생들이 영어를 즐겁게 배울 수 있도록 돕고
-                      있습니다. 단순한 암기가 아닌, 실제로 사용할 수 있는 영어 실력을 기르는 것을 목표로 합니다.
-                    </p>
-                    <p>
-                      모든 학생들이 자신만의 속도로 성장할 수 있도록 맞춤형 학습 자료와 복습 영상을 제공하고 있습니다.
-                    </p>
-                  </div>
+                </div>
 
-                  {/* Qualifications */}
-                  <div className="mt-8">
-                    <h3 className="text-lg font-semibold text-white mb-4">주요 경력</h3>
-                    <ul className="space-y-2 text-gray-300">
-                      <li className="flex items-center gap-3">
-                        <svg
-                          className="w-5 h-5 text-blue-400 flex-shrink-0"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span>영어 교육 전문가</span>
-                      </li>
-                      <li className="flex items-center gap-3">
-                        <svg
-                          className="w-5 h-5 text-blue-400 flex-shrink-0"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span>체계적인 학습 커리큘럼 개발</span>
-                      </li>
-                      <li className="flex items-center gap-3">
-                        <svg
-                          className="w-5 h-5 text-blue-400 flex-shrink-0"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        <span>맞춤형 학습 자료 제작</span>
-                      </li>
-                    </ul>
-                  </div>
+                {/* 소셜 아이콘 (화이트 톤) */}
+                <div className="flex items-center justify-center lg:justify-start gap-6 text-gray-500">
+                  <a href="#" className="hover:text-white transition-colors transform hover:scale-110 duration-300">
+                    <Youtube className="w-7 h-7" />
+                  </a>
+                  <a href="#" className="hover:text-white transition-colors transform hover:scale-110 duration-300">
+                    <Instagram className="w-7 h-7" />
+                  </a>
+                  <a href="#" className="hover:text-white transition-colors transform hover:scale-110 duration-300">
+                    <Mail className="w-7 h-7" />
+                  </a>
                 </div>
               </div>
+
+              <div className="flex-shrink-0 relative group">
+                <div className="absolute -inset-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 opacity-30 blur-2xl group-hover:opacity-50 transition duration-1000 animate-pulse"></div>
+                
+                <div className="w-72 h-72 lg:w-96 lg:h-96 relative rounded-full overflow-hidden border-4 border-white/10 shadow-2xl bg-slate-900 z-10">
+                  <Image
+                    src="/common.jpg"
+                    alt="배문환 강사님"
+                    fill
+                    className="object-cover hover:scale-105 transition-transform duration-700"
+                    priority
+                  />
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
       </div>
-      <Toaster
-        toastOptions={{
-          style: {
-            background: "rgb(23 23 23)",
-            color: "white",
-            border: "1px solid rgb(63 63 70)",
-          },
-          className: "rounded-xl",
-          duration: 5000,
-        }}
-      />
+      <Toaster />
     </main>
   )
 }

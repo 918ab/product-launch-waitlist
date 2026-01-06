@@ -1,93 +1,120 @@
 "use client"
 
 import Link from "next/link"
-import { FolderOpen, Video, MessageCircle, BookOpen } from "lucide-react"
-
-const quickLinks = [
-  {
-    name: "컨텐츠소개",
-    description: "학습 컨텐츠 안내",
-    href: "/dashboard/contents",
-    icon: BookOpen,
-    color: "from-blue-500 to-blue-600",
-  },
-  {
-    name: "자료실",
-    description: "학습 자료 다운로드",
-    href: "/dashboard/resources",
-    icon: FolderOpen,
-    color: "from-purple-500 to-purple-600",
-  },
-  {
-    name: "복습영상",
-    description: "복습 영상 시청",
-    href: "/dashboard/videos",
-    icon: Video,
-    color: "from-pink-500 to-pink-600",
-  },
-  {
-    name: "QNA",
-    description: "질문하기",
-    href: "/dashboard/qna",
-    icon: MessageCircle,
-    color: "from-orange-500 to-orange-600",
-  },
-]
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { PlayCircle, FileText, Bell, ChevronRight, MessageCircle } from "lucide-react"
 
 export default function DashboardPage() {
+  // 공지사항 미리보기 데이터
+  const recentNotices = [
+    { id: 1, title: "2024년 겨울학기 수강 안내", date: "2024-01-15", isNew: true },
+    { id: 2, title: "설 연휴 휴강 안내", date: "2024-01-10", isNew: false },
+    { id: 3, title: "학습 자료 업데이트 완료", date: "2024-01-05", isNew: false },
+  ]
+
   return (
-    <div className="space-y-8">
-      {/* Welcome Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-600 p-8 text-white">
-        <div className="relative z-10">
-          <span className="inline-block px-3 py-1 bg-white/20 rounded-full text-sm font-medium mb-4">환영합니다</span>
-          <h1 className="text-3xl font-bold mb-2">배문환 영어 연구소</h1>
-          <p className="text-blue-100 max-w-lg">
-            체계적인 영어 학습 시스템으로 여러분의 영어 실력 향상을 도와드립니다.
-          </p>
-          <div className="flex gap-3 mt-6">
-            <Link
-              href="/dashboard/resources"
-              className="px-5 py-2.5 bg-white text-blue-600 rounded-xl font-semibold hover:bg-blue-50 transition-colors"
-            >
-              자료실 가기
-            </Link>
-            <Link
-              href="/dashboard/videos"
-              className="px-5 py-2.5 bg-white/20 text-white rounded-xl font-semibold hover:bg-white/30 transition-colors"
-            >
-              복습영상 보기
-            </Link>
-          </div>
-        </div>
-        {/* Decorative circle */}
-        <div className="absolute right-8 top-1/2 -translate-y-1/2 w-40 h-40 bg-white/10 rounded-full" />
-        <div className="absolute right-16 top-1/2 -translate-y-1/2 w-24 h-24 bg-white/10 rounded-full" />
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      
+      {/* 1. 상단 환영 메시지 */}
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+          반갑습니다, 학생님! 👋
+        </h1>
+        <p className="text-slate-500 dark:text-slate-400">
+          오늘도 목표를 향해 힘차게 나아가 봅시다.
+        </p>
       </div>
 
-      {/* Quick Links */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">바로가기</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {quickLinks.map((link) => {
-            const Icon = link.icon
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                className="group p-6 bg-white rounded-2xl border border-gray-200 hover:border-gray-300 hover:shadow-lg transition-all"
-              >
-                <div
-                  className={`w-12 h-12 rounded-xl bg-gradient-to-br ${link.color} flex items-center justify-center mb-4`}
+      {/* 2. 바로가기 카드 섹션 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* 학습 시작하기 */}
+        <Link href="/dashboard/videos" className="group">
+          <Card className="h-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-500 dark:hover:border-blue-500 transition-all hover:shadow-md cursor-pointer group-hover:-translate-y-1">
+            <CardHeader>
+              <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:bg-blue-600 transition-colors">
+                <PlayCircle className="w-6 h-6 text-blue-600 dark:text-blue-400 group-hover:text-white transition-colors" />
+              </div>
+              <CardTitle className="text-xl text-slate-900 dark:text-white">학습 시작하기</CardTitle>
+              <CardDescription className="text-slate-500 dark:text-slate-400 mt-2">
+                지난 시간에 이어 강의를 시청하세요.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        {/* 자료실 */}
+        <Link href="/dashboard/resources" className="group">
+          <Card className="h-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-purple-500 dark:hover:border-purple-500 transition-all hover:shadow-md cursor-pointer group-hover:-translate-y-1">
+            <CardHeader>
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-4 group-hover:bg-purple-600 transition-colors">
+                <FileText className="w-6 h-6 text-purple-600 dark:text-purple-400 group-hover:text-white transition-colors" />
+              </div>
+              <CardTitle className="text-xl text-slate-900 dark:text-white">자료실 이동</CardTitle>
+              <CardDescription className="text-slate-500 dark:text-slate-400 mt-2">
+                필요한 학습 자료를 다운로드하세요.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+        
+        {/* 질문하기 */}
+        <Link href="/dashboard/qna" className="group">
+          <Card className="h-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-500 dark:hover:border-emerald-500 transition-all hover:shadow-md cursor-pointer group-hover:-translate-y-1">
+            <CardHeader>
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-4 group-hover:bg-emerald-600 transition-colors">
+                <MessageCircle className="w-6 h-6 text-emerald-600 dark:text-emerald-400 group-hover:text-white transition-colors" />
+              </div>
+              <CardTitle className="text-xl text-slate-900 dark:text-white">질문하기</CardTitle>
+              <CardDescription className="text-slate-500 dark:text-slate-400 mt-2">
+                궁금한 내용을 선생님께 질문하세요.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+      </div>
+
+      {/* 3. 공지사항 섹션 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xl text-slate-900 dark:text-white flex items-center gap-2">
+              <Bell className="w-5 h-5 text-yellow-500" />
+              최신 공지사항
+            </CardTitle>
+            
+            {/* [수정] href를 "/dashboard/notices"로 변경 */}
+            <Link href="/dashboard/notices">
+              <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+                더보기 <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </Link>
+
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3 mt-4">
+              {recentNotices.map((notice) => (
+                <Link 
+                  key={notice.id} 
+                  // [수정] 여기는 상세 페이지가 아직 없으므로 목록으로 가거나 추후 [id] 페이지 생성 필요
+                  // 일단은 목록으로 연결해 둠
+                  href="/dashboard/notices" 
+                  className="block group"
                 >
-                  <Icon className="w-6 h-6 text-white" />
-                </div>
-                <h3 className="font-semibold text-gray-900 mb-1">{link.name}</h3>
-                <p className="text-sm text-gray-500">{link.description}</p>
-              </Link>
-            )
-          })}
-        </div>
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                    <div className="flex items-center gap-3 overflow-hidden">
+                      {notice.isNew && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />}
+                      <span className="text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate font-medium">
+                        {notice.title}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-500 dark:text-slate-500 shrink-0 ml-2">{notice.date}</span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )
