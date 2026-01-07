@@ -1,17 +1,81 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { PlayCircle, FileText, Bell, ChevronRight, MessageCircle } from "lucide-react"
+import { PlayCircle, FileText, Bell, ChevronRight, MessageCircle, Loader2 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose
+} from "@/components/ui/dialog"
+
+interface Notice {
+  _id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+  isImportant: boolean;
+}
 
 export default function DashboardPage() {
-  // 공지사항 미리보기 데이터
-  const recentNotices = [
-    { id: 1, title: "2024년 겨울학기 수강 안내", date: "2024-01-15", isNew: true },
-    { id: 2, title: "설 연휴 휴강 안내", date: "2024-01-10", isNew: false },
-    { id: 3, title: "학습 자료 업데이트 완료", date: "2024-01-05", isNew: false },
-  ]
+  const [userName, setUserName] = useState("학생")
+  const [notices, setNotices] = useState<Notice[]>([]) 
+  const [loadingNotices, setLoadingNotices] = useState(true)
+  const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("currentUser")
+    if (storedUser) {
+      try {
+        const user = JSON.parse(storedUser)
+        if (user.name) setUserName(user.name)
+      } catch (error) {
+        console.error("유저 정보 파싱 에러", error)
+      }
+    }
+
+    const fetchNotices = async () => {
+      try {
+        // [수정] 통합된 API 사용: 최근 3개만 가져오기
+        const res = await fetch("/api/notices?limit=3")
+        if (res.ok) {
+          const data = await res.json()
+          setNotices(data)
+        }
+      } catch (error) {
+        console.error("공지사항 로딩 실패", error)
+      } finally {
+        setLoadingNotices(false)
+      }
+    }
+
+    fetchNotices()
+  }, [])
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  }
+
+  const isNew = (dateString: string) => {
+    const today = new Date();
+    const date = new Date(dateString);
+    const diffTime = Math.abs(today.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays <= 3;
+  }
+
+  const handleNoticeClick = (notice: Notice) => {
+    setSelectedNotice(notice)
+    setIsDialogOpen(true)
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -19,7 +83,7 @@ export default function DashboardPage() {
       {/* 1. 상단 환영 메시지 */}
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-          반갑습니다, 학생님! 👋
+          반갑습니다, <span className="text-blue-600 dark:text-blue-400">{userName}</span>님! 👋
         </h1>
         <p className="text-slate-500 dark:text-slate-400">
           오늘도 목표를 향해 힘차게 나아가 봅시다.
@@ -28,7 +92,6 @@ export default function DashboardPage() {
 
       {/* 2. 바로가기 카드 섹션 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* 학습 시작하기 */}
         <Link href="/dashboard/videos" className="group">
           <Card className="h-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-500 dark:hover:border-blue-500 transition-all hover:shadow-md cursor-pointer group-hover:-translate-y-1">
             <CardHeader>
@@ -43,7 +106,6 @@ export default function DashboardPage() {
           </Card>
         </Link>
 
-        {/* 자료실 */}
         <Link href="/dashboard/resources" className="group">
           <Card className="h-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-purple-500 dark:hover:border-purple-500 transition-all hover:shadow-md cursor-pointer group-hover:-translate-y-1">
             <CardHeader>
@@ -58,7 +120,6 @@ export default function DashboardPage() {
           </Card>
         </Link>
         
-        {/* 질문하기 */}
         <Link href="/dashboard/qna" className="group">
           <Card className="h-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-500 dark:hover:border-emerald-500 transition-all hover:shadow-md cursor-pointer group-hover:-translate-y-1">
             <CardHeader>
@@ -82,40 +143,72 @@ export default function DashboardPage() {
               <Bell className="w-5 h-5 text-yellow-500" />
               최신 공지사항
             </CardTitle>
-            
-            {/* [수정] href를 "/dashboard/notices"로 변경 */}
             <Link href="/dashboard/notices">
               <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
                 더보기 <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
             </Link>
-
           </CardHeader>
           <CardContent>
             <div className="space-y-3 mt-4">
-              {recentNotices.map((notice) => (
-                <Link 
-                  key={notice.id} 
-                  // [수정] 여기는 상세 페이지가 아직 없으므로 목록으로 가거나 추후 [id] 페이지 생성 필요
-                  // 일단은 목록으로 연결해 둠
-                  href="/dashboard/notices" 
-                  className="block group"
-                >
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                    <div className="flex items-center gap-3 overflow-hidden">
-                      {notice.isNew && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />}
-                      <span className="text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate font-medium">
-                        {notice.title}
+              {loadingNotices ? (
+                <div className="flex justify-center py-8 text-slate-500">
+                   <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                   불러오는 중...
+                </div>
+              ) : notices.length > 0 ? (
+                notices.map((notice) => (
+                  <div 
+                    key={notice._id} 
+                    onClick={() => handleNoticeClick(notice)}
+                    className="block group cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        {isNew(notice.createdAt) && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />}
+                        <span className="text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate font-medium">
+                          {notice.title}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-500 shrink-0 ml-2">
+                        {formatDate(notice.createdAt)}
                       </span>
                     </div>
-                    <span className="text-xs text-slate-500 dark:text-slate-500 shrink-0 ml-2">{notice.date}</span>
                   </div>
-                </Link>
-              ))}
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-500 dark:text-slate-400">
+                  등록된 공지사항이 없습니다.
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold break-keep">
+              {selectedNotice?.title}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-500 mt-1">
+              {selectedNotice && formatDate(selectedNotice.createdAt)}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="mt-4 text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed max-h-[60vh] overflow-y-auto">
+            {selectedNotice?.content}
+          </div>
+          
+          <DialogFooter>
+            <DialogClose asChild>
+                <Button type="button" variant="secondary" className="w-full sm:w-auto">닫기</Button>
+            </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }

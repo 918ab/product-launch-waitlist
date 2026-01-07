@@ -1,9 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -22,68 +21,57 @@ import {
 import {
   Dialog,
   DialogContent,
-  // DialogHeader, // 여기서는 커스텀 디자인을 위해 Header 컴포넌트 대신 직접 div로 짭니다.
-  DialogTitle,    // ★ 중요: 이걸 꼭 써야 에러가 안 납니다.
+  DialogTitle,
   DialogTrigger,
-  DialogDescription, // 접근성을 위해 추가 권장
+  DialogDescription,
 } from "@/components/ui/dialog"
-import { Search, Filter, BookOpen, CheckCircle, Star, BarChart } from "lucide-react"
+import { Search, Filter, BookOpen, CheckCircle, Star, BarChart, Loader2 } from "lucide-react"
 
-// 더미 데이터 (동일함)
-const contents = [
-  {
-    id: 1,
-    title: "기초 문법 마스터",
-    description: "영어의 뼈대를 세우는 필수 문법 강의입니다.",
-    category: "grammar",
-    level: "초급",
-    color: "from-blue-500 to-cyan-400",
-    details: {
-      intro: "영어 공부를 처음 시작하거나, 기초가 부족한 분들을 위한 완벽 가이드입니다. 8품사부터 문장의 5형식까지 쉽고 재미있게 설명합니다.",
-      curriculum: ["1주차: 영어 문장의 기본 구조 (8품사)", "2주차: 동사의 시제 완벽 정리", "3주차: 명사와 관사, 대명사", "4주차: 문장의 5형식 실전 연습"],
-    }
-  },
-  {
-    id: 2,
-    title: "실전 독해 전략 (수능/모의고사)",
-    description: "빠르고 정확하게 정답을 찾는 독해 스킬을 전수합니다.",
-    category: "reading",
-    level: "중급",
-    color: "from-purple-500 to-pink-400",
-    details: {
-      intro: "지문을 다 읽지 않아도 정답이 보입니다. 출제자의 의도를 파악하고 논리적으로 정답을 추론하는 배문환 선생님만의 독해 비법을 공개합니다.",
-      curriculum: ["빈칸 추론 논리적 해결법", "순서 배열 및 문장 삽입 꿀팁", "주제 및 제목 찾기 10초 컷", "장문 독해 시간 단축 스킬"],
-    }
-  },
-  {
-    id: 3,
-    title: "고급 어휘 암기 (Voca 3000)",
-    description: "빈출 어휘와 유의어, 반의어를 체계적으로 학습합니다.",
-    category: "vocabulary",
-    level: "고급",
-    color: "from-emerald-500 to-teal-400",
-    details: {
-      intro: "단어 암기가 지루하다면 이 강의를 선택하세요. 어원 학습법과 연상 기억법을 통해 한 번 외우면 절대 까먹지 않는 기적을 경험하세요.",
-      curriculum: ["수능 필수 빈출 단어 1000", "헷갈리기 쉬운 혼동 어휘 정리", "접두사/접미사로 확장하는 어휘력", "실전 예문으로 익히는 고급 어휘"],
-    }
-  },
-  {
-    id: 4,
-    title: "리스닝 만점 귀뚫기",
-    description: "미국식 발음 원리와 연음 법칙을 완벽하게 이해합니다.",
-    category: "listening",
-    level: "초급",
-    color: "from-orange-400 to-amber-300",
-    details: {
-      intro: "들리지 않는 영어를 들리게 만들어 드립니다. 딕테이션 훈련과 쉐도잉 연습을 통해 리스닝 실력을 단기간에 끌어올립니다.",
-      curriculum: ["연음 법칙과 발음 기호", "핵심 키워드 듣기 연습", "상황별 필수 표현 청취", "실전 모의고사 풀이"],
-    }
-  },
-]
+// DB 데이터 타입 정의
+interface Course {
+  _id: string
+  title: string
+  description: string
+  category: string
+  level: string
+  color: string
+  intro: string
+  curriculum: string[]
+}
 
 export default function ContentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
+  
+  // DB 데이터를 담을 State
+  const [contents, setContents] = useState<Course[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  // [추가] 동적 카테고리 목록 상태
+  const [uniqueCategories, setUniqueCategories] = useState<string[]>([])
+
+  // API에서 커리큘럼 데이터 가져오기
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        // cache: 'no-store'로 최신 데이터 불러오기
+        const res = await fetch("/api/courses", { cache: 'no-store' })
+        if (res.ok) {
+          const data = await res.json()
+          setContents(data)
+
+          // [핵심] DB 데이터에서 카테고리만 뽑아서 중복 제거 (필터용)
+          const categories = Array.from(new Set(data.map((item: any) => item.category))) as string[]
+          setUniqueCategories(categories)
+        }
+      } catch (error) {
+        console.error("데이터 로딩 실패", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchCourses()
+  }, [])
 
   const filteredContents = contents.filter((item) => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase())
@@ -101,6 +89,7 @@ export default function ContentsPage() {
         </p>
       </div>
 
+      {/* 검색 및 필터 */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -121,22 +110,28 @@ export default function ContentsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">전체 보기</SelectItem>
-              <SelectItem value="grammar">문법 (Grammar)</SelectItem>
-              <SelectItem value="reading">독해 (Reading)</SelectItem>
-              <SelectItem value="vocabulary">어휘 (Voca)</SelectItem>
-              <SelectItem value="listening">듣기 (Listening)</SelectItem>
+              {/* [수정] DB에 있는 카테고리만 자동으로 표시 */}
+              {uniqueCategories.map((cat) => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
       </div>
 
+      {/* 컨텐츠 리스트 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredContents.length > 0 ? (
+        {isLoading ? (
+          <div className="col-span-full flex justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          </div>
+        ) : filteredContents.length > 0 ? (
           filteredContents.map((content) => (
-            <Dialog key={content.id}>
+            <Dialog key={content._id}>
               <DialogTrigger asChild>
                 <Card className="group overflow-hidden cursor-pointer border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-lg transition-all duration-300">
-                  <div className={`h-40 w-full bg-gradient-to-br ${content.color} flex items-center justify-center relative overflow-hidden`}>
+                  {/* 상단 그라데이션 영역 */}
+                  <div className={`h-40 w-full bg-gradient-to-br ${content.color || "from-slate-500 to-slate-400"} flex items-center justify-center relative overflow-hidden`}>
                     <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
                     <BookOpen className="text-white w-12 h-12 opacity-80 group-hover:scale-110 transition-transform duration-500" />
                     <Badge className="absolute top-3 right-3 bg-black/40 backdrop-blur-md hover:bg-black/60 border-0">
@@ -150,7 +145,7 @@ export default function ContentsPage() {
                         <Badge variant="outline" className="mb-2 text-slate-500 border-slate-300 dark:border-slate-700 capitalize">
                           {content.category}
                         </Badge>
-                        <CardTitle className="text-xl text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        <CardTitle className="text-xl text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
                           {content.title}
                         </CardTitle>
                       </div>
@@ -158,7 +153,7 @@ export default function ContentsPage() {
                   </CardHeader>
                   
                   <CardContent>
-                    <CardDescription className="line-clamp-2 text-slate-500 dark:text-slate-400">
+                    <CardDescription className="line-clamp-2 text-slate-500 dark:text-slate-400 min-h-[40px]">
                       {content.description}
                     </CardDescription>
                   </CardContent>
@@ -170,20 +165,15 @@ export default function ContentsPage() {
               </DialogTrigger>
 
               <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 overflow-hidden p-0">
-                {/* [수정됨] 
-                  기존: <h2>{content.title}</h2> 
-                  변경: <DialogTitle>{content.title}</DialogTitle>
-                */}
-                <div className={`h-32 w-full bg-gradient-to-r ${content.color} p-6 flex items-end`}>
+                <div className={`h-32 w-full bg-gradient-to-r ${content.color || "from-slate-500 to-slate-400"} p-6 flex items-end`}>
                   <div className="flex items-center gap-3">
-                     <BookOpen className="text-white w-8 h-8" />
-                     <DialogTitle className="text-2xl font-bold text-white shadow-sm">
-                       {content.title}
-                     </DialogTitle>
+                      <BookOpen className="text-white w-8 h-8" />
+                      <DialogTitle className="text-2xl font-bold text-white shadow-sm">
+                        {content.title}
+                      </DialogTitle>
                   </div>
                 </div>
                 
-                {/* 접근성 경고 방지를 위한 설명 추가 (Visually Hidden 될 수 있음) */}
                 <DialogDescription className="sr-only">
                   {content.title} 강의 상세 정보입니다.
                 </DialogDescription>
@@ -208,26 +198,28 @@ export default function ContentsPage() {
                         강의 소개
                       </h3>
                       <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-sm">
-                        {content.details.intro}
+                        {content.intro || content.description}
                       </p>
                     </div>
 
-                    <div>
-                      <h3 className="font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                        주요 커리큘럼
-                      </h3>
-                      <ul className="grid gap-2">
-                        {content.details.curriculum.map((item, index) => (
-                           <li key={index} className="flex items-start gap-3 text-sm text-slate-600 dark:text-slate-300 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                             <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-xs font-bold shrink-0">
-                               {index + 1}
-                             </span>
-                             {item}
-                           </li>
-                        ))}
-                      </ul>
-                    </div>
+                    {content.curriculum && content.curriculum.length > 0 && (
+                      <div>
+                        <h3 className="font-semibold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          주요 커리큘럼
+                        </h3>
+                        <ul className="grid gap-2">
+                          {content.curriculum.map((item, index) => (
+                            <li key={index} className="flex items-start gap-3 text-sm text-slate-600 dark:text-slate-300 p-3 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 text-xs font-bold shrink-0">
+                                {index + 1}
+                              </span>
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                 </div>
@@ -237,7 +229,7 @@ export default function ContentsPage() {
         ) : (
           <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-500 dark:text-slate-400">
             <Search className="w-12 h-12 mb-4 opacity-20" />
-            <p className="text-lg font-medium">검색된 컨텐츠가 없습니다.</p>
+            <p className="text-lg font-medium">등록된 컨텐츠가 없습니다.</p>
             <p className="text-sm mt-1">다른 검색어나 카테고리를 선택해 보세요.</p>
           </div>
         )}

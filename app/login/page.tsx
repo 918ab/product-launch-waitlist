@@ -41,7 +41,6 @@ export default function LoginPage() {
   const { toast } = useToast()
   const router = useRouter()
 
-  // [스타일] 가독성 좋은 토스트 스타일 (회원가입 페이지와 동일)
   const errorToastStyle = "bg-white text-black border-4 border-red-600 p-6 shadow-[0_0_30px_rgba(220,38,38,0.5)] text-lg font-bold"
   const infoToastStyle = "bg-white text-black border-4 border-yellow-500 p-6 shadow-[0_0_30px_rgba(234,179,8,0.5)] text-lg font-bold"
   const successToastStyle = "bg-white text-black border-4 border-blue-600 p-6 shadow-[0_0_30px_rgba(37,99,235,0.5)] text-lg font-bold"
@@ -59,24 +58,25 @@ export default function LoginPage() {
 
       const data = await res.json()
 
-      // 1. 승인 대기 중 (403) 처리
       if (res.status === 403) {
         toast({
           title: "⏳ 로그인 대기",
           description: data.message || "관리자 승인이 필요합니다.",
-          className: infoToastStyle, // 노란색 경고 스타일
+          className: infoToastStyle,
           duration: 4000,
         })
         setIsLoading(false)
         return
       }
 
-      // 2. 로그인 실패 (401 등)
       if (!res.ok) {
         throw new Error(data.message || "로그인 실패")
       }
 
-      // 3. 로그인 성공
+      // [추가된 부분] 로그인 성공 시 유저 정보를 로컬 스토리지에 저장
+      // 이제 대시보드에서 이 정보를 꺼내 쓸 수 있습니다.
+      localStorage.setItem("currentUser", JSON.stringify(data.user))
+
       toast({
         title: "✅ 환영합니다!",
         description: "로그인되었습니다. 메인 페이지로 이동합니다.",

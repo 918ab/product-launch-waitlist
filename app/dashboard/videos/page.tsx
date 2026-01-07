@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,9 +27,11 @@ import {
   Pin,
   ArrowRight,
   RotateCcw,
-  Youtube
+  Youtube,
+  Loader2 
 } from "lucide-react"
 
+// 유튜브 ID 추출 함수
 const getYouTubeId = (url: string) => {
   if (!url) return null;
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -37,74 +39,73 @@ const getYouTubeId = (url: string) => {
   return (match && match[2].length === 11) ? match[2] : null;
 }
 
-
-const videos = [
-  {
-    id: 1,
-    title: "영어 문장의 5형식 완벽 정리 (기초)",
-    description: "영어 문장의 뼈대가 되는 5가지 형식을 예문과 함께 완벽하게 정리합니다. (예시: EBS 영어)",
-    category: "grammar",
-    duration: "12:30",
-    date: "2025-01-20",
-    isPinned: true,
-    // 실제 유튜브 링크 (EBS English)
-    youtubeUrl: "https://youtu.be/M11SvDtPBhA?si=XdOCTd90CskjU0XD" 
-  },
-  {
-    id: 2,
-    title: "빈칸 추론, 논리적으로 푸는 법",
-    description: "오답률 1위 빈칸 추론, 감으로 찍지 말고 논리로 푸세요. (예시: 대성마이맥)",
-    category: "reading",
-    duration: "15:45",
-    date: "2025-01-18",
-    isPinned: true,
-    // 실제 유튜브 링크 (수능 영어 강의 예시)
-    youtubeUrl: "https://www.youtube.com/watch?v=Jd1tXyS_c9Q" 
-  },
-  {
-    id: 3,
-    title: "TED: 새로운 언어를 배우는 비결",
-    description: "언어 천재가 말하는 외국어를 빨리 습득하는 방법입니다. (예시: TED)",
-    category: "listening",
-    duration: "18:20",
-    date: "2024-03-15",
-    isPinned: false,
-    // 실제 유튜브 링크 (TED)
-    youtubeUrl: "https://www.youtube.com/watch?v=-WLHr1_EVtQ" 
-  },
-  {
-    id: 4,
-    title: "수능 필수 영단어 - 이동 중 암기",
-    description: "하루 30분, 이동 시간에 듣는 단어장. 어원 설명 포함. (예시: 단어장)",
-    category: "vocabulary",
-    duration: "1:00:00",
-    date: "2024-11-10",
-    isPinned: false,
-    // 실제 유튜브 링크 (단어장 ASMR)
-    youtubeUrl: "https://www.youtube.com/watch?v=33G_5VuvF4o" 
-  },
-  {
-    id: 5,
-    title: "관계대명사 vs 관계부사 차이점",
-    description: "많은 학생들이 헷갈려하는 관계사 파트, 명쾌하게 구분해 드립니다.",
-    category: "grammar",
-    duration: "08:15",
-    date: "2024-12-05",
-    isPinned: false,
-    // 실제 유튜브 링크 (문법 강의)
-    youtubeUrl: "https://www.youtube.com/watch?v=M7lc1UVf-VE" 
-  },
-]
+// 데이터 타입 정의
+interface Video {
+  id: string
+  title: string
+  description: string
+  category: string
+  duration: string
+  date: string // 화면 표시용 (YYYY-MM-DD)
+  createdAt: string // 필터링용 원본 날짜
+  isPinned: boolean
+  youtubeUrl: string
+}
 
 export default function VideosPage() {
+  const [videos, setVideos] = useState<Video[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  // 검색 및 필터 상태
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
+  
+  // [추가] 동적 카테고리 목록
+  const [uniqueCategories, setUniqueCategories] = useState<string[]>([])
+
+  // 기간 설정 상태
   const [dateFilter, setDateFilter] = useState("all") 
   const [startDate, setStartDate] = useState("") 
   const [endDate, setEndDate] = useState("")   
   const [tempStart, setTempStart] = useState("")
   const [tempEnd, setTempEnd] = useState("")
 
+  // 데이터 불러오기
+  useEffect(() => {
+    const fetchVideos = async () => {
+      try {
+        const res = await fetch("/api/contents", { cache: 'no-store' }) // 최신 데이터 보장
+        if (res.ok) {
+          const data = await res.json()
+          
+          // 데이터 변환
+          const formattedData = data.map((item: any) => ({
+            id: item._id,
+            title: item.title,
+            description: item.description || "",
+            category: item.category || "기타",
+            duration: item.duration ? String(item.duration) : "00:00",
+            date: item.createdAt.split("T")[0], 
+            createdAt: item.createdAt,
+            isPinned: item.isPinned || false,
+            youtubeUrl: item.videoUrl || ""
+          }))
+          setVideos(formattedData)
+
+          // [핵심] 카테고리 목록 추출 (중복 제거)
+          const categories = Array.from(new Set(formattedData.map((v: any) => v.category))) as string[]
+          setUniqueCategories(categories)
+        }
+      } catch (error) {
+        console.error("강의 로딩 실패", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchVideos()
+  }, [])
+
+  // 기간 검색 핸들러
   const handleCustomSearch = () => {
     setStartDate(tempStart)
     setEndDate(tempEnd)
@@ -117,19 +118,20 @@ export default function VideosPage() {
     setEndDate("")
   }
 
+  // 필터링 로직
   const filteredVideos = videos.filter((video) => {
     const matchesSearch = video.title.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory = categoryFilter === "all" || video.category === categoryFilter
     
     let matchesDate = true
-    const itemDate = new Date(video.date)
+    const itemDate = new Date(video.createdAt)
     const now = new Date()
 
     if (dateFilter === "custom") {
       if (startDate && endDate) {
         const start = new Date(startDate)
         const end = new Date(endDate)
-        end.setHours(23, 59, 59)
+        end.setHours(23, 59, 59) // 종료일의 마지막 시간까지 포함
         matchesDate = itemDate >= start && itemDate <= end
       } else if (startDate) {
         const start = new Date(startDate)
@@ -152,10 +154,11 @@ export default function VideosPage() {
     return matchesSearch && matchesCategory && matchesDate
   })
 
+  // 정렬 (중요 핀 고정 우선 -> 최신순)
   const sortedVideos = [...filteredVideos].sort((a, b) => {
     if (a.isPinned && !b.isPinned) return -1
     if (!a.isPinned && b.isPinned) return 1
-    return new Date(b.date).getTime() - new Date(a.date).getTime()
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   })
 
   return (
@@ -180,6 +183,8 @@ export default function VideosPage() {
             />
           </div>
           <div className="flex flex-col sm:flex-row gap-4">
+            
+            {/* 기간 설정 Select */}
             <div className="w-full sm:w-[160px]">
               <Select value={dateFilter} onValueChange={setDateFilter}>
                 <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
@@ -198,6 +203,8 @@ export default function VideosPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* [수정] 동적 카테고리 Select */}
             <div className="w-full sm:w-[160px]">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
@@ -208,16 +215,16 @@ export default function VideosPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">전체 과목</SelectItem>
-                  <SelectItem value="grammar">문법 (Grammar)</SelectItem>
-                  <SelectItem value="reading">독해 (Reading)</SelectItem>
-                  <SelectItem value="listening">듣기 (Listening)</SelectItem>
-                  <SelectItem value="vocabulary">어휘 (Voca)</SelectItem>
+                  {uniqueCategories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
         </div>
 
+        {/* 기간 직접 입력 UI */}
         {dateFilter === "custom" && (
           <div className="flex flex-col sm:flex-row items-center gap-2 p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg animate-in slide-in-from-top-2 duration-300">
             <span className="text-sm font-medium text-slate-600 dark:text-slate-300 shrink-0">기간 상세 설정:</span>
@@ -235,10 +242,13 @@ export default function VideosPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {sortedVideos.length > 0 ? (
+        {isLoading ? (
+          <div className="col-span-full flex justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          </div>
+        ) : sortedVideos.length > 0 ? (
           sortedVideos.map((video) => {
             const videoId = getYouTubeId(video.youtubeUrl)
-            // 썸네일 URL 생성 (maxresdefault가 없으면 hqdefault 사용 - 여기선 maxresdefault 사용)
             const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` : null
 
             return (
@@ -261,7 +271,6 @@ export default function VideosPage() {
                   rel="noopener noreferrer"
                   className="relative block aspect-video w-full overflow-hidden bg-slate-100 dark:bg-slate-800"
                 >
-                  {/* 실제 썸네일 이미지 표시 */}
                   {thumbnailUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img 
@@ -270,11 +279,9 @@ export default function VideosPage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                     />
                   ) : (
-                    // 썸네일 없을 경우 기본 그라데이션
                     <div className="w-full h-full bg-gradient-to-br from-slate-400 to-slate-600" />
                   )}
 
-                  {/* 오버레이 (어둡게 처리 + 재생 버튼) */}
                   <div className="absolute inset-0 bg-black/10 group-hover:bg-black/30 transition-colors flex items-center justify-center">
                     <div className="w-14 h-14 rounded-full bg-white/30 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
                       <PlayCircle className="w-8 h-8 text-white fill-white/20" />

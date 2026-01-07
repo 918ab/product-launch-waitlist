@@ -14,7 +14,7 @@ export function Footer() {
             <span className="font-semibold text-gray-300">대표:</span> 배문환
           </p>
           <p className="mt-1">
-            서울특별시 강남구 테헤란로 123
+            인천광역시 ~
             <span className="mx-2 text-gray-700">|</span>
             Tel: 02-1234-5678
             <span className="mx-2 text-gray-700">|</span>

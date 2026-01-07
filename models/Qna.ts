@@ -10,25 +10,23 @@ const QnaSchema = new mongoose.Schema({
     required: true,
   },
   answer: {
-    type: String,
-    default: null,
+    type: String, 
   },
   author: {
-    type: String,
+    type: String, 
     required: true,
   },
   authorId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
+    type: String,
+  },
+  isSecret: {
+    type: Boolean,
+    default: false,
   },
   status: {
     type: String,
     enum: ["waiting", "answered"],
     default: "waiting",
-  },
-  isSecret: {
-    type: Boolean,
-    default: false,
   },
   createdAt: {
     type: Date,

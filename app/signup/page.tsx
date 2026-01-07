@@ -61,12 +61,11 @@ export default function SignupPage() {
       return
     }
 
-    // 2. 비밀번호 강도 확인
     if (!passwordRegex.test(password)) {
       toast({
         title: "⚠️ 비밀번호 형식 오류",
         description: "8자 이상 + 특수문자(!@#$%^&*)를 꼭 포함해주세요!",
-        className: errorToastStyle, // 스타일 적용
+        className: errorToastStyle,
         duration: 4000,
       })
       return
@@ -81,12 +80,11 @@ export default function SignupPage() {
         body: JSON.stringify({ name, email, password }),
       })
 
-      // 3. 중복 이메일 (409) 처리
       if (res.status === 409) {
         toast({
           title: "🚫 가입 실패",
           description: "이미 가입된 이메일입니다. 로그인 해주세요.",
-          className: errorToastStyle, // 스타일 적용
+          className: errorToastStyle, 
           duration: 4000,
         })
         setIsLoading(false)
@@ -99,11 +97,10 @@ export default function SignupPage() {
         throw new Error(data.message || "회원가입 실패")
       }
 
-      // 4. 성공 처리
       toast({
         title: "✅ 회원가입 성공!",
         description: "잠시 후 로그인 페이지로 이동합니다.",
-        className: successToastStyle, // 파란색 테두리 스타일 적용
+        className: successToastStyle,
         duration: 2000,
       })
 
@@ -127,7 +124,7 @@ export default function SignupPage() {
 
   return (
     <main
-      className="min-h-screen text-white selection:bg-blue-500/30"
+      className="min-h-screen text-white selection:bg-blue-500/30 pt-3"
       style={{
         background: "radial-gradient(circle at center, #111827, #000000)",
       }}
@@ -144,7 +141,6 @@ export default function SignupPage() {
         <Header isLoggedIn={false} />
 
         <div className="min-h-screen flex items-center justify-center px-4 pt-20 pb-8">
-          {/* 디자인 원상복구: 투명한 느낌 */}
           <div className="w-full max-w-md bg-white/5 backdrop-blur-md p-8 rounded-3xl border border-white/10 shadow-2xl">
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-white mb-2">회원가입</h1>
@@ -154,7 +150,6 @@ export default function SignupPage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-gray-300">이름</Label>
-                {/* 파란 테두리 제거 버전 유지 */}
                 <div className="rounded-xl bg-black/20 ring-1 ring-white/10 focus-within:ring-2 focus-within:ring-white/30 transition-all">
                   <Input
                     id="name"

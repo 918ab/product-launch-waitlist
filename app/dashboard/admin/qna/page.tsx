@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -17,9 +17,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogFooter,
-  DialogClose
+  DialogClose,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { 
@@ -31,85 +30,126 @@ import {
   CornerDownRight, 
   Send,
   Calendar,
-  MoreHorizontal
+  MoreHorizontal,
+  Trash2, // 삭제 아이콘 사용
+  Loader2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 
-const initialQna = [
-  { 
-    id: 1, 
-    title: "1강 문장의 5형식 질문입니다.", 
-    question: "4형식을 3형식으로 바꿀 때 전치사 for를 쓰는 동사들이 헷갈립니다.", 
-    author: "김학생", 
-    date: "2025-01-22", 
-    status: "waiting", 
-    answer: "",
-    isSecret: false 
-  },
-  { 
-    id: 2, 
-    title: "교재 배송이 언제 시작되나요? (비공개)", 
-    question: "주문한지 3일 지났는데 아직 배송준비중입니다.", 
-    author: "이수강", 
-    date: "2025-01-21", 
-    status: "waiting", 
-    answer: "",
-    isSecret: true 
-  },
-  { 
-    id: 3, 
-    title: "관계대명사 that 사용법", 
-    question: "계속적 용법에서는 that을 쓸 수 없나요?", 
-    author: "박열공", 
-    date: "2025-01-20", 
-    status: "answered", 
-    answer: "네, 맞습니다.",
-    isSecret: false 
-  },
-  { 
-    id: 4, 
-    title: "선생님 상담 요청드려요.", 
-    question: "성적이 너무 안 올라서 고민입니다...", 
-    author: "최고민", 
-    date: "2025-01-19", 
-    status: "answered", 
-    answer: "고민이 많겠네요.",
-    isSecret: true 
-  },
-]
+// DB 데이터 타입 정의
+interface QnaItem {
+  _id: string
+  title: string
+  question: string
+  answer?: string
+  author: string
+  createdAt: string
+  status: "waiting" | "answered"
+  isSecret: boolean
+}
 
 export default function AdminQnaPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [activeTab, setActiveTab] = useState("waiting")
-  const [qnaList, setQnaList] = useState(initialQna)
+  const [qnaList, setQnaList] = useState<QnaItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedItem, setSelectedItem] = useState<any>(null)
+  const [selectedItem, setSelectedItem] = useState<QnaItem | null>(null)
   const [answerText, setAnswerText] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
 
+  const { toast } = useToast()
+
+  // 1. 데이터 불러오기 (GET)
+  const fetchQnaList = async () => {
+    setIsLoading(true)
+    try {
+      const res = await fetch("/api/qna", { cache: 'no-store' })
+      if (res.ok) {
+        const data = await res.json()
+        setQnaList(data)
+      }
+    } catch (error) {
+      console.error("QnA 로딩 실패", error)
+      toast({ title: "데이터를 불러오지 못했습니다.", variant: "destructive" })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchQnaList()
+  }, [])
+
+  // 필터링 로직
   const filteredList = qnaList.filter(item => {
     const matchTab = activeTab === "all" ? true : item.status === activeTab
     const matchSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                        item.author.includes(searchTerm)
+                        item.author.toLowerCase().includes(searchTerm.toLowerCase())
     return matchTab && matchSearch
   })
 
   const waitingCount = qnaList.filter(item => item.status === "waiting").length
 
-  const handleOpenModal = (item: any) => {
+  // 모달 열기
+  const handleOpenModal = (item: QnaItem) => {
     setSelectedItem(item)
     setAnswerText(item.answer || "")
     setIsModalOpen(true)
   }
 
-  const handleSaveAnswer = () => {
+  // 2. 답변 저장 (PUT)
+  const handleSaveAnswer = async () => {
     if (!selectedItem) return
-    setQnaList(qnaList.map(item => 
-      item.id === selectedItem.id 
-        ? { ...item, status: "answered", answer: answerText } 
-        : item
-    ))
-    setIsModalOpen(false)
+    
+    setIsSaving(true)
+    try {
+      const res = await fetch("/api/qna", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedItem._id,
+          answer: answerText
+        })
+      })
+
+      if (res.ok) {
+        toast({ title: "답변이 등록되었습니다." })
+        setIsModalOpen(false)
+        fetchQnaList() // 목록 새로고침
+      } else {
+        throw new Error("저장 실패")
+      }
+    } catch (error) {
+      toast({ title: "오류가 발생했습니다.", variant: "destructive" })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // 3. 질문 삭제 (DELETE)
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation() // 부모 클릭(모달 열기) 방지
+    if (!confirm("정말 이 질문을 삭제하시겠습니까?")) return
+
+    try {
+      const res = await fetch(`/api/qna?id=${id}`, { method: "DELETE" })
+      if (res.ok) {
+        toast({ title: "삭제되었습니다." })
+        setQnaList(prev => prev.filter(item => item._id !== id))
+      } else {
+        throw new Error("삭제 실패")
+      }
+    } catch (error) {
+      toast({ title: "삭제 중 오류가 발생했습니다.", variant: "destructive" })
+    }
+  }
+
+  // 날짜 포맷팅 함수
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString()
   }
 
   return (
@@ -184,11 +224,13 @@ export default function AdminQnaPage() {
       {/* 1. 모바일 뷰 (카드 리스트) - md 미만에서만 보임 */}
       {/* ======================================================= */}
       <div className="md:hidden space-y-4">
-        {filteredList.length > 0 ? (
+        {isLoading ? (
+           <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-600"/></div>
+        ) : filteredList.length > 0 ? (
           filteredList.map((item) => (
             <div 
-              key={item.id} 
-              className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3"
+              key={item._id} 
+              className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3 active:scale-[0.98] transition-transform"
               onClick={() => handleOpenModal(item)}
             >
               {/* 상단: 상태 뱃지 + 날짜 */}
@@ -199,7 +241,7 @@ export default function AdminQnaPage() {
                   <Badge variant="secondary" className="bg-green-100 text-green-600 border-0">완료됨</Badge>
                 )}
                 <span className="text-xs text-slate-400 flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> {item.date}
+                  <Calendar className="w-3 h-3" /> {formatDate(item.createdAt)}
                 </span>
               </div>
 
@@ -216,9 +258,14 @@ export default function AdminQnaPage() {
                 <div className="flex items-center gap-1 text-sm text-slate-500">
                   <User className="w-4 h-4" /> {item.author}
                 </div>
-                <Button size="sm" variant={item.status === 'waiting' ? "default" : "outline"} className={item.status === 'waiting' ? "bg-blue-600 h-8" : "h-8"}>
-                  {item.status === 'waiting' ? "답변하기" : "수정하기"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" className="h-8 px-2 text-red-500 hover:bg-red-50" onClick={(e) => handleDelete(e, item._id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                  <Button size="sm" variant={item.status === 'waiting' ? "default" : "outline"} className={item.status === 'waiting' ? "bg-blue-600 h-8" : "h-8"}>
+                    {item.status === 'waiting' ? "답변하기" : "수정하기"}
+                  </Button>
+                </div>
               </div>
             </div>
           ))
@@ -244,9 +291,15 @@ export default function AdminQnaPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredList.length > 0 ? (
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="h-32 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-600" />
+                </TableCell>
+              </TableRow>
+            ) : filteredList.length > 0 ? (
               filteredList.map((item) => (
-                <TableRow key={item.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50" onClick={() => handleOpenModal(item)}>
+                <TableRow key={item._id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50" onClick={() => handleOpenModal(item)}>
                   <TableCell className="text-center">
                     {item.status === 'waiting' ? (
                       <Badge variant="secondary" className="bg-red-100 text-red-600 border-0 whitespace-nowrap">대기중</Badge>
@@ -271,13 +324,19 @@ export default function AdminQnaPage() {
                   </TableCell>
                   
                   <TableCell className="text-sm text-slate-500 whitespace-nowrap">
-                    {item.date}
+                    {formatDate(item.createdAt)}
                   </TableCell>
                   
                   <TableCell className="text-right whitespace-nowrap">
-                    <Button size="sm" variant={item.status === 'waiting' ? "default" : "outline"} className={item.status === 'waiting' ? "bg-blue-600 hover:bg-blue-700" : ""}>
-                      {item.status === 'waiting' ? "답변하기" : "수정하기"}
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      {/* 삭제 버튼 추가 (이벤트 전파 방지 필수) */}
+                      <Button size="sm" variant="ghost" className="h-8 px-2 text-red-500 hover:bg-red-50 hover:text-red-700" onClick={(e) => handleDelete(e, item._id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant={item.status === 'waiting' ? "default" : "outline"} className={item.status === 'waiting' ? "bg-blue-600 hover:bg-blue-700" : ""}>
+                        {item.status === 'waiting' ? "답변하기" : "수정하기"}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -314,11 +373,13 @@ export default function AdminQnaPage() {
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
                 <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center text-xs font-bold">Q</span>
                 {selectedItem?.author} 학생의 질문
-                <span className="text-xs font-normal text-slate-400 ml-auto">{selectedItem?.date}</span>
+                <span className="text-xs font-normal text-slate-400 ml-auto">
+                  {selectedItem && formatDate(selectedItem.createdAt)}
+                </span>
               </div>
-              <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-sm leading-relaxed">
+              <div className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-sm leading-relaxed max-h-[200px] overflow-y-auto">
                 <p className="font-bold mb-2">{selectedItem?.title}</p>
-                {selectedItem?.question}
+                <p className="whitespace-pre-wrap">{selectedItem?.question}</p>
               </div>
             </div>
 
@@ -340,9 +401,8 @@ export default function AdminQnaPage() {
             <DialogClose asChild>
               <Button variant="outline">취소</Button>
             </DialogClose>
-            <Button onClick={handleSaveAnswer} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
-              <Send className="w-4 h-4" />
-              답변 등록
+            <Button onClick={handleSaveAnswer} className="bg-blue-600 hover:bg-blue-700 text-white gap-2" disabled={isSaving}>
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /> 답변 등록</>}
             </Button>
           </DialogFooter>
         </DialogContent>

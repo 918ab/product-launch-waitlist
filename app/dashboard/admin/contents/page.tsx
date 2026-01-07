@@ -1,409 +1,474 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { 
-  Search, 
-  FileText, 
-  Video, 
-  Bell, 
-  Trash2,
-  Youtube,
-  Download,
-  Pencil,
-  Loader2,
-  Calendar
+  Search, FileText, Video, Bell, Trash2, Youtube, Download, 
+  Pencil, Loader2, BookOpen, Paperclip, X
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-const initialContents = [
-  { id: 1, title: "1강. 문장의 5형식 완벽 분석", type: "video", category: "grammar", date: "2025-01-20", detail: "45:30", link: "https://youtube.com/..." },
-  { id: 2, title: "2025 문법 핵심 요약집.pdf", type: "resource", category: "grammar", date: "2025-01-20", detail: "15MB", file: "file_path..." },
-  { id: 3, title: "[필독] 2월 월간 테스트 안내", type: "notice", target: "student", date: "2025-01-18", detail: "수강생" },
-  { id: 4, title: "수능 영단어 Day 1-10", type: "resource", category: "vocabulary", date: "2025-01-15", detail: "8MB", file: "file_path..." },
-]
+import { useToast } from "@/hooks/use-toast"
 
 export default function AdminContentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [contents, setContents] = useState(initialContents)
   const [activeTypeTab, setActiveTypeTab] = useState("all") 
+  const [contents, setContents] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const { toast } = useToast()
 
-  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false)
-  const [isResourceModalOpen, setIsResourceModalOpen] = useState(false)
-  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState(false)
-  const [editingItem, setEditingItem] = useState<any>(null)
-  const [isFetchingYoutube, setIsFetchingYoutube] = useState(false)
-  const [youtubeInfo, setYoutubeInfo] = useState({ duration: "", thumbnail: "" })
-
-  const filteredContents = contents.filter(item => {
-    const matchTab = activeTypeTab === "all" ? true : item.type === activeTypeTab
-    const matchSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchTab && matchSearch
+  const [modalOpen, setModalOpen] = useState({
+    video: false, resource: false, notice: false, course: false
   })
+  
+  const [editingId, setEditingId] = useState<string | null>(null)
 
-  const handleDelete = (id: number) => {
-    if(confirm("정말 삭제하시겠습니까?")) {
-      setContents(contents.filter(item => item.id !== id))
+  // 1. 영상 폼
+  const [videoForm, setVideoForm] = useState({ title: "", link: "", category: "grammar", customCategory: "", desc: "", duration: "00:00" })
+  
+  // 2. 자료 폼
+  const [resForm, setResForm] = useState({ title: "", category: "기타", customCategory: "", desc: "" })
+  const [resFiles, setResFiles] = useState<FileList | null>(null)
+  const [existingFiles, setExistingFiles] = useState<any[]>([])
+  
+  const [isUploading, setIsUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // 3. 공지 폼
+  const [noticeForm, setNoticeForm] = useState({ title: "", content: "", isImportant: false, target: "all" })
+  // 4. 커리큘럼 폼
+  const [courseForm, setCourseForm] = useState({ title: "", description: "", category: "grammar", customCategory: "", level: "초급", intro: "", curriculum: "" })
+
+  const fetchAllData = async () => {
+    setIsLoading(true)
+    try {
+      const [videoRes, resRes, noticeRes, courseRes] = await Promise.all([
+        fetch("/api/contents", { cache: 'no-store' }), 
+        fetch("/api/resources", { cache: 'no-store' }), 
+        fetch("/api/notices", { cache: 'no-store' }), 
+        fetch("/api/courses", { cache: 'no-store' })
+      ])
+
+      const videos = videoRes.ok ? await videoRes.json() : []
+      const resources = resRes.ok ? await resRes.json() : []
+      const notices = noticeRes.ok ? await noticeRes.json() : []
+      const courses = courseRes.ok ? await courseRes.json() : []
+
+      const allData = [
+        ...videos.map((v:any) => ({ ...v, id: v._id, type: "video", date: v.createdAt?.split("T")[0] || "", detail: v.duration })),
+        ...resources.map((r:any) => ({ ...r, id: r._id, type: "resource", date: r.createdAt?.split("T")[0] || "", detail: `${r.files?.length || 0}개 파일` })),
+        
+        // [수정] 공지사항: isImportant 여부에 따라 카테고리 필드 채우기
+        ...notices.map((n:any) => ({ 
+            ...n, 
+            id: n._id, 
+            type: "notice", 
+            date: n.createdAt?.split("T")[0] || "", 
+            detail: n.target === 'all' ? '전체' : n.target === 'student' ? '학생' : '외부',
+            category: n.isImportant ? "중요" : "일반" // 여기서 변환
+        })),
+        
+        ...courses.map((c:any) => ({ ...c, id: c._id, type: "course", date: c.createdAt?.split("T")[0] || "", detail: c.level }))
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+      setContents(allData)
+    } catch (error) {
+      console.error(error)
+      toast({ title: "데이터 로딩 실패", variant: "destructive" })
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  useEffect(() => { fetchAllData() }, [])
+
+  const closeModal = () => {
+    setModalOpen({ video: false, resource: false, notice: false, course: false })
+    setEditingId(null)
+    setVideoForm({ title: "", link: "", category: "grammar", customCategory: "", desc: "", duration: "00:00" })
+    setResForm({ title: "", category: "기타", customCategory: "", desc: "" })
+    setResFiles(null)
+    setExistingFiles([])
+    if(fileInputRef.current) fileInputRef.current.value = ""
+    setNoticeForm({ title: "", content: "", isImportant: false, target: "all" })
+    setCourseForm({ title: "", description: "", category: "grammar", customCategory: "", level: "초급", intro: "", curriculum: "" })
   }
 
   const handleEditClick = (item: any) => {
-    setEditingItem(item)
-    if (item.type === 'video') setIsVideoModalOpen(true)
-    else if (item.type === 'resource') setIsResourceModalOpen(true)
-    else if (item.type === 'notice') setIsNoticeModalOpen(true)
+    setEditingId(item.id)
+    if (item.type === 'video') {
+      const isCustom = !["grammar", "reading", "listening", "vocabulary"].includes(item.category)
+      setVideoForm({ 
+        title: item.title, link: item.videoUrl, desc: item.description || "", 
+        duration: item.duration || "00:00",
+        category: isCustom ? "direct" : item.category,
+        customCategory: isCustom ? item.category : ""
+      })
+      setModalOpen({ ...modalOpen, video: true })
+    } 
+    else if (item.type === 'resource') {
+      const isCustom = !["기출문제", "단어장", "수업자료", "기타"].includes(item.category)
+      setResForm({ 
+        title: item.title, desc: item.description || "",
+        category: isCustom ? "direct" : item.category,
+        customCategory: isCustom ? item.category : ""
+      })
+      setExistingFiles(item.files || [])
+      setModalOpen({ ...modalOpen, resource: true })
+    }
+    else if (item.type === 'notice') {
+      setNoticeForm({ title: item.title, content: item.content, isImportant: item.isImportant, target: item.target || "all" })
+      setModalOpen({ ...modalOpen, notice: true })
+    }
+    else if (item.type === 'course') {
+      const isCustom = !["grammar", "reading", "vocabulary", "listening"].includes(item.category)
+      setCourseForm({
+        title: item.title, description: item.description, level: item.level, intro: item.intro,
+        curriculum: item.curriculum ? item.curriculum.join("\n") : "",
+        category: isCustom ? "direct" : item.category,
+        customCategory: isCustom ? item.category : ""
+      })
+      setModalOpen({ ...modalOpen, course: true })
+    }
   }
 
-  const handleModalClose = (open: boolean) => {
-    if (!open) {
-      setEditingItem(null)
-      setYoutubeInfo({ duration: "", thumbnail: "" })
-      setIsFetchingYoutube(false)
+  const handleDelete = async (id: string, type: string) => {
+    if (!confirm("정말 삭제하시겠습니까?")) return
+    const endpointMap: Record<string, string> = { video: "contents", resource: "resources", notice: "notices", course: "courses" }
+    
+    try {
+      const res = await fetch(`/api/${endpointMap[type]}?id=${id}`, { method: "DELETE" })
+      if (res.ok) {
+        toast({ title: "삭제되었습니다." })
+        setContents(prev => prev.filter(c => c.id !== id))
+      }
+    } catch (e) {
+      toast({ title: "삭제 실패", variant: "destructive" })
     }
-    if (!open && isVideoModalOpen) setIsVideoModalOpen(false)
-    if (!open && isResourceModalOpen) setIsResourceModalOpen(false)
-    if (!open && isNoticeModalOpen) setIsNoticeModalOpen(false)
   }
 
-  const handleYoutubeLinkChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const url = e.target.value
-    if (url.length > 10) {
-      setIsFetchingYoutube(true)
-      setTimeout(() => {
-        setIsFetchingYoutube(false)
-        setYoutubeInfo({ duration: "48:20", thumbnail: "" })
-      }, 1500)
+  const removeExistingFile = (indexToRemove: number) => {
+    setExistingFiles(prev => prev.filter((_, idx) => idx !== indexToRemove))
+  }
+
+  // 자료 저장
+  const saveResource = async () => {
+    const finalCategory = resForm.category === "direct" ? resForm.customCategory : resForm.category
+    
+    if (existingFiles.length === 0 && (!resFiles || resFiles.length === 0)) {
+        toast({ title: "최소 1개의 파일이 필요합니다.", variant: "destructive" }); return;
     }
+
+    setIsUploading(true)
+    try {
+      let finalFileList = [...existingFiles]
+
+      if (resFiles && resFiles.length > 0) {
+        for (let i = 0; i < resFiles.length; i++) {
+          const file = resFiles[i]
+          const uploadRes = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, { method: 'POST', body: file })
+          
+          if (!uploadRes.ok) {
+             const err = await uploadRes.text();
+             console.error(err);
+             throw new Error("Vercel 업로드 실패");
+          }
+          const blob = await uploadRes.json()
+          
+          finalFileList.push({
+            fileName: blob.pathname || file.name,
+            filePath: blob.url,
+            fileSize: (file.size / 1024 / 1024).toFixed(2) + " MB"
+          })
+        }
+      }
+
+      const dbRes = await fetch("/api/resources", {
+        method: editingId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...(editingId && { id: editingId }),
+          title: resForm.title, 
+          description: resForm.desc, 
+          category: finalCategory,
+          files: finalFileList, 
+          isNewResource: true
+        })
+      })
+
+      if (!dbRes.ok) {
+         const err = await dbRes.json();
+         throw new Error(err.message || "DB 저장 실패");
+      }
+
+      toast({ title: "저장 완료!" })
+      closeModal()
+      await fetchAllData()
+
+    } catch (e: any) {
+      console.error(e)
+      toast({ title: e.message || "오류 발생", variant: "destructive" })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  const saveVideo = async () => {
+    const finalCategory = videoForm.category === "direct" ? videoForm.customCategory : videoForm.category
+    const body = { title: videoForm.title, videoUrl: videoForm.link, description: videoForm.desc, category: finalCategory, duration: videoForm.duration, ...(editingId && { id: editingId }) }
+    await fetch("/api/contents", { method: editingId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    closeModal(); fetchAllData(); toast({ title: "저장 완료" })
+  }
+
+  const saveNotice = async () => {
+    const body = { title: noticeForm.title, content: noticeForm.content, isImportant: noticeForm.isImportant, target: noticeForm.target, ...(editingId && { id: editingId }) }
+    await fetch("/api/notices", { method: editingId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    closeModal(); fetchAllData(); toast({ title: "저장 완료" })
+  }
+
+  const saveCourse = async () => {
+    const finalCategory = courseForm.category === "direct" ? courseForm.customCategory : courseForm.category
+    const body = {
+      title: courseForm.title, description: courseForm.description, level: courseForm.level, 
+      intro: courseForm.intro, curriculum: courseForm.curriculum.split("\n"),
+      category: finalCategory, ...(editingId && { id: editingId })
+    }
+    await fetch("/api/courses", { method: editingId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+    closeModal(); fetchAllData(); toast({ title: "저장 완료" })
   }
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <FileText className="w-6 h-6 md:w-8 md:h-8 text-slate-800 dark:text-slate-200" />
-          컨텐츠 관리
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <FileText className="w-8 h-8" /> 컨텐츠 통합 관리
         </h1>
-        <p className="text-sm md:text-base text-slate-500 dark:text-slate-400">
-          강의, 자료, 공지사항을 등록하고 관리합니다.
-        </p>
+        <p className="text-slate-500">강의, 자료, 공지, 커리큘럼을 관리합니다.</p>
       </div>
 
       <div className="flex flex-col xl:flex-row justify-between gap-4 items-end xl:items-center">
-        
-        {/* 등록 버튼 그룹 */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full xl:w-auto">
-          {/* 1. 영상 */}
-          <Dialog open={isVideoModalOpen} onOpenChange={handleModalClose}>
-            {!editingItem && (
-              <Button onClick={() => setIsVideoModalOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white gap-2 w-full">
-                <Youtube className="w-4 h-4" /> <span className="hidden sm:inline">영상 등록</span><span className="sm:hidden">영상</span>
-              </Button>
-            )}
-            <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900">
-              <DialogHeader>
-                <DialogTitle>{editingItem ? "영상 수정" : "새로운 영상 등록"}</DialogTitle>
-                <DialogDescription>YouTube 링크를 입력하세요.</DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                 <div className="space-y-2">
-                  <Label>카테고리</Label>
-                  <Select defaultValue={editingItem?.category || "grammar"}>
-                    <SelectTrigger className="bg-white dark:bg-slate-950"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="grammar">문법</SelectItem>
-                      <SelectItem value="reading">독해</SelectItem>
-                      <SelectItem value="listening">듣기</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>강의 제목</Label>
-                  <Input defaultValue={editingItem?.title} className="bg-white dark:bg-slate-950" />
-                </div>
-                <div className="space-y-2">
-                  <Label>YouTube 링크</Label>
-                  <Input defaultValue={editingItem?.link} onChange={handleYoutubeLinkChange} className="bg-white dark:bg-slate-950" />
-                  {isFetchingYoutube && <div className="text-xs text-blue-500">정보 가져오는 중...</div>}
-                </div>
-              </div>
-              <DialogFooter>
-                <DialogClose asChild><Button variant="outline">취소</Button></DialogClose>
-                <Button type="submit" className="bg-blue-600 text-white">저장</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* 2. 자료 */}
-          <Dialog open={isResourceModalOpen} onOpenChange={handleModalClose}>
-            {!editingItem && (
-              <Button onClick={() => setIsResourceModalOpen(true)} className="bg-orange-600 hover:bg-orange-700 text-white gap-2 w-full">
-                <Download className="w-4 h-4" /> <span className="hidden sm:inline">자료 등록</span><span className="sm:hidden">자료</span>
-              </Button>
-            )}
-            <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900">
-              <DialogHeader><DialogTitle>자료 등록</DialogTitle></DialogHeader>
-              <div className="grid gap-4 py-4">
-                 <Label>제목</Label>
-                 <Input defaultValue={editingItem?.title} className="bg-white dark:bg-slate-950" />
-                 <Label>파일 업로드</Label>
-                 <Input type="file" className="bg-white dark:bg-slate-950" />
-              </div>
-              <DialogFooter>
-                <DialogClose asChild><Button variant="outline">취소</Button></DialogClose>
-                <Button type="submit" className="bg-orange-600 text-white">저장</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          {/* 3. 공지 */}
-          <Dialog open={isNoticeModalOpen} onOpenChange={handleModalClose}>
-            {!editingItem && (
-              <Button onClick={() => setIsNoticeModalOpen(true)} className="bg-yellow-500 hover:bg-yellow-600 text-white gap-2 w-full">
-                <Bell className="w-4 h-4" /> <span className="hidden sm:inline">공지 등록</span><span className="sm:hidden">공지</span>
-              </Button>
-            )}
-            <DialogContent className="sm:max-w-[500px] bg-white dark:bg-slate-900">
-               <DialogHeader><DialogTitle>공지 등록</DialogTitle></DialogHeader>
-               <div className="grid gap-4 py-4">
-                 <Label>제목</Label>
-                 <Input defaultValue={editingItem?.title} className="bg-white dark:bg-slate-950" />
-                 <Label>내용</Label>
-                 <Textarea className="bg-white dark:bg-slate-950" />
-               </div>
-              <DialogFooter>
-                <DialogClose asChild><Button variant="outline">취소</Button></DialogClose>
-                <Button type="submit" className="bg-yellow-500 text-white">저장</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full xl:w-auto">
+          <Button onClick={() => setModalOpen({ ...modalOpen, video: true })} className="bg-blue-600 hover:bg-blue-700 text-white gap-2"><Youtube className="w-4 h-4" /> 영상</Button>
+          <Button onClick={() => setModalOpen({ ...modalOpen, resource: true })} className="bg-orange-600 hover:bg-orange-700 text-white gap-2"><Download className="w-4 h-4" /> 자료</Button>
+          <Button onClick={() => setModalOpen({ ...modalOpen, notice: true })} className="bg-yellow-500 hover:bg-yellow-600 text-white gap-2"><Bell className="w-4 h-4" /> 공지</Button>
+          <Button onClick={() => setModalOpen({ ...modalOpen, course: true })} className="bg-purple-600 hover:bg-purple-700 text-white gap-2"><BookOpen className="w-4 h-4" /> 소개</Button>
         </div>
-
-        {/* 검색창 */}
-        <div className="relative w-full xl:w-72 mt-4 xl:mt-0">
+        <div className="relative w-full xl:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-          <Input 
-            placeholder="제목 검색..." 
-            className="pl-9 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+          <Input placeholder="제목 검색..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
         </div>
       </div>
 
-      {/* 탭 메뉴 */}
-      <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-lg w-full overflow-x-auto no-scrollbar">
-        <button
-          onClick={() => setActiveTypeTab("all")}
-          className={cn(
-            "whitespace-nowrap flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all",
-            activeTypeTab === "all" ? "bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm" : "text-slate-500"
-          )}
-        >
-          전체 보기
-        </button>
-        <button
-          onClick={() => setActiveTypeTab("video")}
-          className={cn(
-            "whitespace-nowrap flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2",
-            activeTypeTab === "video" ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm" : "text-slate-500"
-          )}
-        >
-          영상
-        </button>
-        <button
-          onClick={() => setActiveTypeTab("resource")}
-          className={cn(
-            "whitespace-nowrap flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2",
-            activeTypeTab === "resource" ? "bg-white dark:bg-slate-800 text-orange-600 dark:text-orange-400 shadow-sm" : "text-slate-500"
-          )}
-        >
-          자료
-        </button>
-        <button
-          onClick={() => setActiveTypeTab("notice")}
-          className={cn(
-            "whitespace-nowrap flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all flex items-center justify-center gap-2",
-            activeTypeTab === "notice" ? "bg-white dark:bg-slate-800 text-yellow-600 dark:text-yellow-400 shadow-sm" : "text-slate-500"
-          )}
-        >
-          공지
-        </button>
+      <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-lg overflow-x-auto">
+        {["all", "video", "resource", "notice", "course"].map(tab => (
+          <button key={tab} onClick={() => setActiveTypeTab(tab)}
+            className={cn("flex-1 px-4 py-2 text-sm font-medium rounded-md capitalize transition-all", activeTypeTab === tab ? "bg-white shadow text-black" : "text-slate-500")}
+          >
+            {tab === 'all' ? '전체' : tab === 'video' ? '영상' : tab === 'resource' ? '자료' : tab === 'notice' ? '공지' : '소개'}
+          </button>
+        ))}
       </div>
 
-      {/* ======================================================= */}
-      {/* 1. 모바일 뷰 (카드 리스트) */}
-      {/* ======================================================= */}
-      <div className="md:hidden space-y-4">
-        {filteredContents.length > 0 ? (
-          filteredContents.map((item) => (
-            <div key={item.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
-              {/* 상단: 유형 아이콘 + 제목 */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-3">
-                  <div className="mt-1">
-                    {item.type === 'video' && <Video className="w-5 h-5 text-blue-500" />}
-                    {item.type === 'resource' && <FileText className="w-5 h-5 text-orange-500" />}
-                    {item.type === 'notice' && <Bell className="w-5 h-5 text-yellow-500" />}
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 dark:text-white leading-tight">
-                      {item.title}
-                    </h3>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      <Badge variant="secondary" className="bg-slate-100 dark:bg-slate-800 text-slate-500 font-normal">
-                        {item.detail}
-                      </Badge>
-                      <Badge variant="outline" className="border-slate-200 text-slate-500 font-normal">
-                        {item.type === 'notice' ? (
-                          item.target === 'student' ? '수강생' : '전체'
-                        ) : (
-                          item.category
-                        )}
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              </div>
+      <div className="bg-white dark:bg-slate-900 border rounded-xl overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>유형</TableHead>
+              <TableHead>제목</TableHead>
+              {/* [수정] 헤더 이름을 카테고리/중요 로 변경 */}
+              <TableHead>카테고리/중요</TableHead>
+              <TableHead>상세</TableHead>
+              <TableHead>날짜</TableHead>
+              <TableHead className="text-right">관리</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {contents.filter(item => (activeTypeTab === "all" || item.type === activeTypeTab) && item.title.includes(searchTerm)).map((item) => (
+              <TableRow key={item.id}>
+                <TableCell className="capitalize font-medium text-xs text-slate-500">{item.type}</TableCell>
+                <TableCell className="font-bold">{item.title}</TableCell>
+                <TableCell>
+                  {/* [수정] 공지사항이면 중요 여부, 그 외엔 카테고리 표시 */}
+                  {item.type === 'notice' ? (
+                    item.category === '중요' ? <Badge className="bg-red-500 hover:bg-red-600 border-0">중요(필독)</Badge> : <Badge variant="secondary">일반</Badge>
+                  ) : (
+                    <Badge variant="outline">{item.category}</Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-xs text-slate-500">{item.detail}</TableCell>
+                <TableCell className="text-xs">{item.date}</TableCell>
+                <TableCell className="text-right">
+                  <Button size="sm" variant="ghost" onClick={() => handleEditClick(item)}><Pencil className="w-4 h-4 text-blue-500" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleDelete(item.id, item.type)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
-              {/* 하단: 날짜 + 액션 버튼 */}
-              <div className="flex items-center justify-between mt-1 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <span className="text-xs text-slate-400 flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> {item.date}
-                </span>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="h-8 px-3" onClick={() => handleEditClick(item)}>
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-8 px-3 hover:text-red-600 hover:border-red-200" onClick={() => handleDelete(item.id)}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
+      {/* 1. 영상 모달 */}
+      <Dialog open={modalOpen.video} onOpenChange={(o) => !o && closeModal()}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader><DialogTitle>{editingId ? "영상 수정" : "영상 등록"}</DialogTitle></DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div className="space-y-3">
+              <Label>카테고리</Label>
+              <div className="flex gap-2">
+                <Select value={videoForm.category} onValueChange={(v) => setVideoForm({ ...videoForm, category: v })}>
+                  <SelectTrigger className="w-full sm:w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="grammar">문법</SelectItem><SelectItem value="reading">독해</SelectItem>
+                    <SelectItem value="listening">듣기</SelectItem><SelectItem value="vocabulary">어휘</SelectItem>
+                    <SelectItem value="direct">직접 입력</SelectItem>
+                  </SelectContent>
+                </Select>
+                {videoForm.category === "direct" && <Input className="flex-1" placeholder="직접 입력" value={videoForm.customCategory} onChange={(e) => setVideoForm({ ...videoForm, customCategory: e.target.value })} />}
               </div>
             </div>
-          ))
-        ) : (
-          <div className="py-10 text-center text-slate-500 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-            데이터가 없습니다.
+            <div className="space-y-3"><Label>제목</Label><Input value={videoForm.title} onChange={(e) => setVideoForm({ ...videoForm, title: e.target.value })} /></div>
+            <div className="space-y-3"><Label>링크</Label><Input value={videoForm.link} onChange={(e) => setVideoForm({ ...videoForm, link: e.target.value })} placeholder="https://..." /></div>
+            <div className="space-y-3"><Label>시간 (예: 15:30)</Label><Input value={videoForm.duration} onChange={(e) => setVideoForm({ ...videoForm, duration: e.target.value })} /></div>
           </div>
-        )}
-      </div>
+          <DialogFooter><Button onClick={saveVideo}>저장</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* ======================================================= */}
-      {/* 2. 데스크탑 뷰 (테이블) */}
-      {/* ======================================================= */}
-      <div className="hidden md:block bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <Table className="min-w-[800px]">
-            <TableHeader className="bg-slate-50 dark:bg-slate-950">
-              <TableRow>
-                <TableHead className="w-[80px]">ID</TableHead>
-                <TableHead className="w-[100px]">유형</TableHead>
-                <TableHead>제목</TableHead>
-                <TableHead>상세정보</TableHead>
-                <TableHead>카테고리/대상</TableHead>
-                <TableHead>등록일</TableHead>
-                <TableHead className="text-right">관리</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredContents.length > 0 ? (
-                filteredContents.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium text-slate-500">#{item.id}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                        {item.type === 'video' && <Video className="w-4 h-4 text-blue-500" />}
-                        {item.type === 'resource' && <FileText className="w-4 h-4 text-orange-500" />}
-                        {item.type === 'notice' && <Bell className="w-4 h-4 text-yellow-500" />}
-                        <span className="capitalize text-xs font-medium">
-                          {item.type === 'video' ? '영상' : item.type === 'resource' ? '자료' : '공지'}
-                        </span>
+      {/* 2. 자료 모달 */}
+      <Dialog open={modalOpen.resource} onOpenChange={(o) => !o && closeModal()}>
+        <DialogContent className="sm:max-w-[500px] gap-6">
+          <DialogHeader><DialogTitle>{editingId ? "자료 수정" : "자료 등록"}</DialogTitle></DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div className="space-y-3">
+              <Label>카테고리</Label>
+              <div className="flex gap-2">
+                <Select value={resForm.category} onValueChange={(v) => setResForm({ ...resForm, category: v })}>
+                  <SelectTrigger className="w-full sm:w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="기출문제">기출문제</SelectItem><SelectItem value="단어장">단어장</SelectItem>
+                    <SelectItem value="수업자료">수업자료</SelectItem><SelectItem value="direct">직접 입력</SelectItem>
+                  </SelectContent>
+                </Select>
+                {resForm.category === "direct" && <Input className="flex-1" placeholder="직접 입력" value={resForm.customCategory} onChange={(e) => setResForm({ ...resForm, customCategory: e.target.value })} />}
+              </div>
+            </div>
+            <div className="space-y-3"><Label>제목</Label><Input value={resForm.title} onChange={(e) => setResForm({ ...resForm, title: e.target.value })} /></div>
+            <div className="space-y-3">
+              <Label>설명</Label>
+              <Textarea value={resForm.desc} onChange={(e) => setResForm({ ...resForm, desc: e.target.value })} className="min-h-[100px] resize-none" placeholder="자료 설명" />
+            </div>
+            
+            <div className="space-y-3">
+              <Label>파일 (여러 개 선택 가능)</Label>
+              {existingFiles.length > 0 && (
+                <div className="mb-2 space-y-2">
+                  <p className="text-xs text-slate-500 font-bold">기존 파일:</p>
+                  {existingFiles.map((file, i) => (
+                    <div key={i} className="flex items-center justify-between text-sm bg-slate-100 dark:bg-slate-800 p-2 rounded">
+                      <div className="flex items-center gap-2 truncate">
+                        <Paperclip className="w-3 h-3 text-slate-500" />
+                        <span className="truncate">{file.fileName}</span>
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-bold text-slate-900 dark:text-white whitespace-nowrap">
-                        {item.title}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="font-normal text-slate-500 bg-slate-100 dark:bg-slate-800 whitespace-nowrap">
-                        {item.detail}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="capitalize font-normal text-slate-500 border-slate-300 dark:border-slate-700 whitespace-nowrap">
-                        {item.type === 'notice' ? (
-                          item.target === 'student' ? '수강생 전용' : item.target === 'all' ? '전체 공개' : '외부 전용'
-                        ) : (
-                          item.category
-                        )}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-500 text-sm whitespace-nowrap">
-                      {item.date}
-                    </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleEditClick(item)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          className="h-8 w-8 p-0 hover:text-red-600"
-                          onClick={() => handleDelete(item.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-slate-500">
-                    등록된 컨텐츠가 없습니다.
-                  </TableCell>
-                </TableRow>
+                      <button onClick={() => removeExistingFile(i)} className="text-red-500 hover:bg-red-100 p-1 rounded"><X className="w-3 h-3"/></button>
+                    </div>
+                  ))}
+                </div>
               )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+
+              <Input type="file" multiple ref={fileInputRef} onChange={(e) => setResFiles(e.target.files)} className="cursor-pointer" />
+              
+              {resFiles && resFiles.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  <p className="text-xs text-blue-500 font-bold">새로 추가될 파일:</p>
+                  {Array.from(resFiles).map((file, i) => (
+                    <div key={i} className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 p-2 rounded">
+                      <Paperclip className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{file.name}</span>
+                      <span className="text-xs opacity-70 shrink-0">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter><Button onClick={saveResource} disabled={isUploading}>{isUploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>저장 중</> : "저장"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 3. 공지 모달 */}
+      <Dialog open={modalOpen.notice} onOpenChange={(o) => !o && closeModal()}>
+        <DialogContent className="sm:max-w-[500px] gap-6">
+          <DialogHeader><DialogTitle>{editingId ? "공지 수정" : "공지 등록"}</DialogTitle></DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div className="space-y-3">
+              <Label>공개 대상</Label>
+              <Select value={noticeForm.target} onValueChange={(v) => setNoticeForm({ ...noticeForm, target: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체 공개</SelectItem>
+                  <SelectItem value="student">학생만 공개</SelectItem>
+                  <SelectItem value="guest">비회원만 공개</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-3"><Label>제목</Label><Input value={noticeForm.title} onChange={(e) => setNoticeForm({ ...noticeForm, title: e.target.value })} /></div>
+            <div className="space-y-3"><Label>내용</Label><Textarea value={noticeForm.content} onChange={(e) => setNoticeForm({ ...noticeForm, content: e.target.value })} className="min-h-[100px]" /></div>
+            <div className="flex items-center gap-2 pt-2">
+              <input type="checkbox" checked={noticeForm.isImportant} onChange={(e) => setNoticeForm({ ...noticeForm, isImportant: e.target.checked })} className="w-4 h-4" /> 
+              <Label>중요(필독) 설정</Label>
+            </div>
+          </div>
+          <DialogFooter><Button onClick={saveNotice}>저장</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 4. 커리큘럼 모달 */}
+      <Dialog open={modalOpen.course} onOpenChange={(o) => !o && closeModal()}>
+        <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto gap-6">
+          <DialogHeader><DialogTitle>{editingId ? "커리큘럼 수정" : "커리큘럼 등록"}</DialogTitle></DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div className="space-y-3">
+              <Label>카테고리</Label>
+              <div className="flex gap-2">
+                <Select value={courseForm.category} onValueChange={(v) => setCourseForm({ ...courseForm, category: v })}>
+                  <SelectTrigger className="w-full sm:w-[140px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="grammar">문법</SelectItem><SelectItem value="reading">독해</SelectItem>
+                    <SelectItem value="listening">듣기</SelectItem><SelectItem value="direct">직접 입력</SelectItem>
+                  </SelectContent>
+                </Select>
+                {courseForm.category === "direct" && <Input className="flex-1" placeholder="입력" value={courseForm.customCategory} onChange={(e) => setCourseForm({ ...courseForm, customCategory: e.target.value })} />}
+              </div>
+            </div>
+            <div className="space-y-3"><Label>제목</Label><Input value={courseForm.title} onChange={(e) => setCourseForm({ ...courseForm, title: e.target.value })} /></div>
+            <div className="space-y-3">
+              <Label>난이도</Label>
+              <Select value={courseForm.level} onValueChange={(v) => setCourseForm({ ...courseForm, level: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="초급">초급</SelectItem><SelectItem value="중급">중급</SelectItem><SelectItem value="고급">고급</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-3"><Label>한줄 요약</Label><Input value={courseForm.description} onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })} /></div>
+            <div className="space-y-3"><Label>상세 소개</Label><Textarea value={courseForm.intro} onChange={(e) => setCourseForm({ ...courseForm, intro: e.target.value })} /></div>
+            <div className="space-y-3"><Label>커리큘럼 (줄바꿈)</Label><Textarea value={courseForm.curriculum} onChange={(e) => setCourseForm({ ...courseForm, curriculum: e.target.value })} placeholder="1주차: ...&#13;&#10;2주차: ..." className="min-h-[100px]" /></div>
+          </div>
+          <DialogFooter><Button onClick={saveCourse}>저장</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }

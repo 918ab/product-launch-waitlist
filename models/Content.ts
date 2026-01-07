@@ -3,33 +3,26 @@ import mongoose from "mongoose";
 const ContentSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: true,
+    required: [true, "강의 제목을 입력해주세요."],
   },
-  type: {
-    type: String,
-    enum: ["video", "resource", "notice"], 
-    required: true,
-  },
-  category: {
-    type: String,
-  },
-  link: {
-    type: String,
-  },
-  detail: {
-    type: String,
-  },
-  content: {
+  description: {
     type: String,
   },
   isPinned: {
     type: Boolean,
     default: false,
   },
-  target: {
+  videoUrl: {
+    type: String, 
+    required: [true, "영상 링크가 필요합니다."],
+  },
+  category: {
     type: String,
-    enum: ["student", "all", "guest"], 
-    default: "student",
+    default: "grammar", 
+  },
+  duration: {
+    type: String, 
+    default: "00:00",
   },
   createdAt: {
     type: Date,
