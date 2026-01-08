@@ -17,7 +17,7 @@ export function MainHero() {
       </h1>
 
       <p className="text-lg sm:text-xl mb-10 text-gray-300 max-w-lg leading-relaxed">
-        체계적인 영어 학습 시스템으로 여러분의 영어 실력 향상을 도와드립니다. 지금 바로 시작하세요.
+        체계적인 영어 학습 시스템으로 여러분의 상승곡선을  <br className="hidden lg:block" />이끕니다. 지금 바로 시작하세요.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-4 w-full max-w-md">
