@@ -1,43 +1,57 @@
-import { put, list } from "@vercel/blob";
-import { NextResponse } from "next/server";
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client';
+import { list } from '@vercel/blob'; 
+import { NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+// 1. 업로드 토큰 발급 (POST)
+export async function POST(request: Request): Promise<Response> {
+  const body = (await request.json()) as HandleUploadBody;
+
   try {
-    const { searchParams } = new URL(request.url);
-    const filename = searchParams.get("filename");
-
-    if (!filename || !request.body) {
-      return NextResponse.json({ message: "파일이 없습니다." }, { status: 400 });
-    }
-
-    let finalName = filename;
-    const { blobs } = await list({ prefix: filename.split('.')[0], limit: 50 });
-    
-    const exists = blobs.some(b => b.pathname === finalName);
-    
-    if (exists) {
-      const namePart = filename.substring(0, filename.lastIndexOf("."));
-      const extPart = filename.substring(filename.lastIndexOf("."));
-      let counter = 1;
-      
-      while (blobs.some(b => b.pathname === `${namePart} (${counter})${extPart}`)) {
-        counter++;
-      }
-      finalName = `${namePart} (${counter})${extPart}`;
-    }
-
-    const blob = await put(finalName, request.body, {
-      access: "public",
-      addRandomSuffix: false, 
+    const jsonResponse = await handleUpload({
+      body,
+      request,
+      onBeforeGenerateToken: async () => {
+        return {
+          allowedContentTypes: ['application/pdf', 'image/jpeg', 'image/png'], 
+          
+          addRandomSuffix: false, 
+        };
+      },
+      onUploadCompleted: async ({ blob }) => {
+        console.log('업로드 완료:', blob.url);
+      },
     });
 
-    return NextResponse.json(blob);
-    
+    return NextResponse.json(jsonResponse);
   } catch (error) {
-    console.error("❌ 업로드 에러:", error);
     return NextResponse.json(
-      { message: "업로드 서버 에러 발생" },
-      { status: 500 }
+      { error: (error as Error).message },
+      { status: 400 },
     );
   }
+}
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const filename = searchParams.get('filename');
+
+  if (!filename) {
+    return NextResponse.json({ error: 'No filename' }, { status: 400 });
+  }
+
+  const extIndex = filename.lastIndexOf('.');
+  const namePart = extIndex !== -1 ? filename.substring(0, extIndex) : filename;
+  const extPart = extIndex !== -1 ? filename.substring(extIndex) : '';
+
+  const { blobs } = await list({ prefix: namePart, limit: 100 });
+  
+  let finalName = filename;
+  let counter = 1;
+
+  while (blobs.some(b => b.pathname === finalName)) {
+    finalName = `${namePart} (${counter})${extPart}`;
+    counter++;
+  }
+
+  return NextResponse.json({ uniqueName: finalName });
 }

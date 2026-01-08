@@ -1,6 +1,9 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+// ✅ [수정] Vercel Blob 클라이언트 업로드 함수 추가
+import { upload } from "@vercel/blob/client" 
+
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -70,14 +73,13 @@ export default function AdminContentsPage() {
         ...videos.map((v:any) => ({ ...v, id: v._id, type: "video", date: v.createdAt?.split("T")[0] || "", detail: v.duration })),
         ...resources.map((r:any) => ({ ...r, id: r._id, type: "resource", date: r.createdAt?.split("T")[0] || "", detail: `${r.files?.length || 0}개 파일` })),
         
-        // [수정] 공지사항: isImportant 여부에 따라 카테고리 필드 채우기
         ...notices.map((n:any) => ({ 
             ...n, 
             id: n._id, 
             type: "notice", 
             date: n.createdAt?.split("T")[0] || "", 
             detail: n.target === 'all' ? '전체' : n.target === 'student' ? '학생' : '외부',
-            category: n.isImportant ? "중요" : "일반" // 여기서 변환
+            category: n.isImportant ? "중요" : "일반"
         })),
         
         ...courses.map((c:any) => ({ ...c, id: c._id, type: "course", date: c.createdAt?.split("T")[0] || "", detail: c.level }))
@@ -163,7 +165,7 @@ export default function AdminContentsPage() {
     setExistingFiles(prev => prev.filter((_, idx) => idx !== indexToRemove))
   }
 
-  // 자료 저장
+
   const saveResource = async () => {
     const finalCategory = resForm.category === "direct" ? resForm.customCategory : resForm.category
     
@@ -178,18 +180,23 @@ export default function AdminContentsPage() {
       if (resFiles && resFiles.length > 0) {
         for (let i = 0; i < resFiles.length; i++) {
           const file = resFiles[i]
-          const uploadRes = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`, { method: 'POST', body: file })
           
-          if (!uploadRes.ok) {
-             const err = await uploadRes.text();
-             console.error(err);
-             throw new Error("Vercel 업로드 실패");
-          }
-          const blob = await uploadRes.json()
+          // 1. 서버에 요청해서 (1)이 붙은 깔끔한 파일명을 받아옵니다.
+          const checkRes = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`);
+          if (!checkRes.ok) throw new Error("파일명 확인 실패");
+          
+          const { uniqueName } = await checkRes.json(); // 예: "자료 (1).pdf"
+
+          // 2. 받아온 이름으로 업로드합니다.
+          // ❌ addRandomSuffix 옵션은 여기서 절대 쓰지 마세요 (에러 원인)
+          const newBlob = await upload(uniqueName, file, {
+            access: 'public',
+            handleUploadUrl: '/api/upload', 
+          });
           
           finalFileList.push({
-            fileName: blob.pathname || file.name,
-            filePath: blob.url,
+            fileName: uniqueName, 
+            filePath: newBlob.url,
             fileSize: (file.size / 1024 / 1024).toFixed(2) + " MB"
           })
         }
@@ -288,7 +295,6 @@ export default function AdminContentsPage() {
             <TableRow>
               <TableHead>유형</TableHead>
               <TableHead>제목</TableHead>
-              {/* [수정] 헤더 이름을 카테고리/중요 로 변경 */}
               <TableHead>카테고리/중요</TableHead>
               <TableHead>상세</TableHead>
               <TableHead>날짜</TableHead>
@@ -301,7 +307,6 @@ export default function AdminContentsPage() {
                 <TableCell className="capitalize font-medium text-xs text-slate-500">{item.type}</TableCell>
                 <TableCell className="font-bold">{item.title}</TableCell>
                 <TableCell>
-                  {/* [수정] 공지사항이면 중요 여부, 그 외엔 카테고리 표시 */}
                   {item.type === 'notice' ? (
                     item.category === '중요' ? <Badge className="bg-red-500 hover:bg-red-600 border-0">중요(필독)</Badge> : <Badge variant="secondary">일반</Badge>
                   ) : (
