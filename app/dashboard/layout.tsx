@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useEffect } from "react" 
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation" // useRouter 추가
+import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { 
   Home, BookOpen, FolderOpen, Video, MessageCircle, LogOut, Bell, User, Sun, Moon,
@@ -14,6 +14,7 @@ import { Toaster } from "@/components/ui/toaster"
 import {
   SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem,
   SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarInset,
+  useSidebar // [핵심] 사이드바 제어 훅 추가
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 
@@ -38,10 +39,20 @@ function DashboardSidebarContent({ user, isAdmin, handleLogout }: any) {
   const pathname = usePathname()
   const { setTheme, theme } = useTheme()
   const [mounted, setMounted] = useState(false)
+  
+  // [핵심] 사이드바 상태 제어 훅 가져오기
+  const { isMobile, setOpenMobile } = useSidebar()
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // [핵심] 모바일에서 링크 클릭 시 사이드바 닫는 함수
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false)
+    }
+  }
 
   return (
     <>
@@ -55,6 +66,7 @@ function DashboardSidebarContent({ user, isAdmin, handleLogout }: any) {
                 <SidebarMenuButton
                   asChild
                   isActive={isActive}
+                  onClick={handleLinkClick} // [추가] 클릭 시 닫기
                   className={cn(
                     "h-10 transition-colors",
                     isActive 
@@ -87,6 +99,7 @@ function DashboardSidebarContent({ user, isAdmin, handleLogout }: any) {
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
+                      onClick={handleLinkClick} // [추가] 클릭 시 닫기
                       className={cn(
                         "h-10 transition-colors",
                         isActive 
@@ -130,7 +143,7 @@ function DashboardSidebarContent({ user, isAdmin, handleLogout }: any) {
             <SidebarMenuButton 
               asChild 
               className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 h-10 cursor-pointer"
-              onClick={handleLogout} // 로그아웃 핸들러 연결
+              onClick={handleLogout}
             >
               <div>
                 <LogOut className="w-5 h-5 mr-3" />
@@ -153,16 +166,14 @@ export default function DashboardLayout({
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
-  // 1. 유저 정보 가져오기 (권한 확인용)
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const res = await fetch("/api/auth/me") // 내 정보 가져오는 API (아래에서 만듭니다)
+        const res = await fetch("/api/auth/me")
         if (res.ok) {
           const userData = await res.json()
           setUser(userData)
         } else {
-          // 세션이 없으면 로그인 페이지로 (Middleware가 있지만 이중 체크)
           router.push("/login")
         }
       } catch (e) {
@@ -174,7 +185,6 @@ export default function DashboardLayout({
     fetchUser()
   }, [router])
 
-  // 2. 로그아웃 함수
   const handleLogout = async (e: React.MouseEvent) => {
     e.preventDefault()
     try {
@@ -216,7 +226,6 @@ export default function DashboardLayout({
                 <Bell className="w-5 h-5" />
               </Button>
               <div className="flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-700">
-                {/* 유저 정보에 따라 아이콘/이름 변경 */}
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center shadow-sm ${isAdmin ? "bg-slate-800 text-white" : "bg-blue-100 text-blue-600"}`}>
                   {isAdmin ? <ShieldCheck className="w-5 h-5" /> : <User className="w-5 h-5" />}
                 </div>

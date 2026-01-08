@@ -9,16 +9,16 @@ export function Footer() {
 
         <div className="text-center md:text-right text-xs leading-relaxed">
           <p>
-            <span className="font-semibold text-gray-300">사업자등록번호:</span> 123-45-67890 
+            <span className="font-semibold text-gray-300">사업자등록번호:</span> 866-54-00698
             <span className="mx-2 text-gray-700">|</span>
             <span className="font-semibold text-gray-300">대표:</span> 배문환
           </p>
           <p className="mt-1">
-            인천광역시 ~
+            인천광역시 서구 염곡로 498번 안길 1 
             <span className="mx-2 text-gray-700">|</span>
-            Tel: 02-1234-5678
+            Tel: 010-9950-3823
             <span className="mx-2 text-gray-700">|</span>
-            Email: contact@example.com
+            Email: bae_moonhwan@naver.com
           </p>
         </div>
       </div>
