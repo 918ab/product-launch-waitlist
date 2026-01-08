@@ -6,6 +6,7 @@ import { ConditionalFooter } from "./components/conditional-footer"
 import "./globals.css"
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://engmoonhwan.com"),
   title: {
     default: "배문환 영어 연구소",
     template: "%s | 배문환 영어 연구소", 
