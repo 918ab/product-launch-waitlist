@@ -263,8 +263,10 @@ export default function QnaPage() {
         ) : sortedList.length > 0 ? (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {sortedList.map((item) => {
-              const isMyPost = currentUser && item.authorId === currentUser._id
-              // 열람 권한: 내 글이거나 비밀글이 아니면 볼 수 있음
+              const isMyPost = 
+                currentUser?._id && 
+                item.authorId && 
+                String(item.authorId) === String(currentUser._id)
               const canView = isMyPost || !item.isSecret
               const displayAuthor = isMyPost ? "나" : (item.isSecret ? "익명" : item.author)
 
