@@ -172,7 +172,7 @@ export default function ExamPage() {
           {EXAM_DATA.questions.map((q, idx) => (
             <div 
               key={q.id} 
-              ref={el => questionRefs.current[q.id] = el}
+              //ref={el => questionRefs.current[q.id] = el}
               className="group relative bg-white dark:bg-slate-900 rounded-2xl md:rounded-[2rem] p-5 md:p-10 transition-all border border-slate-100 dark:border-slate-800 shadow-sm"
             >
               <div className="flex items-start justify-between mb-4 md:mb-6">
