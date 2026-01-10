@@ -1,213 +1,237 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { 
+  Bell, Calendar, ChevronRight, Clock, BookOpen, AlertCircle, Pin, Trophy, MessageCircle 
+} from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { PlayCircle, FileText, Bell, ChevronRight, MessageCircle, Loader2 } from "lucide-react"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose
-} from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 
-interface Notice {
-  _id: string;
-  title: string;
-  content: string;
-  createdAt: string;
-  isImportant: boolean;
-}
-
-export default function DashboardPage() {
-  const [userName, setUserName] = useState("학생")
-  const [notices, setNotices] = useState<Notice[]>([]) 
-  const [loadingNotices, setLoadingNotices] = useState(true)
-  const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
+export default function StudentDashboardPage() {
+  const [user, setUser] = useState<any>(null)
+  const [notices, setNotices] = useState<any[]>([])
+  const [upcomingTests, setUpcomingTests] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("currentUser")
-    if (storedUser) {
+    const fetchData = async () => {
       try {
-        const user = JSON.parse(storedUser)
-        if (user.name) setUserName(user.name)
-      } catch (error) {
-        console.error("유저 정보 파싱 에러", error)
-      }
-    }
+        setIsLoading(true)
+        
+        // 1. 사용자 정보
+        const userRes = await fetch("/api/auth/me")
+        if (userRes.ok) setUser(await userRes.json())
 
-    const fetchNotices = async () => {
-      try {
-        // [수정] 통합된 API 사용: 최근 3개만 가져오기
-        const res = await fetch("/api/notices?limit=3")
-        if (res.ok) {
-          const data = await res.json()
-          setNotices(data)
+        // 2. 공지사항 가져오기
+        const noticeRes = await fetch("/api/notices")
+        if (noticeRes.ok) {
+          const data = await noticeRes.json()
+          // 중요 공지 우선, 그 다음 최신순 정렬
+          const sorted = data.sort((a: any, b: any) => {
+            if (a.isImportant === b.isImportant) {
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            }
+            return a.isImportant ? -1 : 1
+          }).slice(0, 5) // 5개만 표시
+          setNotices(sorted)
         }
+
+        // 3. 시험 일정 가져오기
+        const testRes = await fetch("/api/tests")
+        if (testRes.ok) {
+          const data = await testRes.json()
+          const now = new Date()
+          now.setHours(0, 0, 0, 0) // 오늘 날짜 0시 기준
+
+          // 다가올 시험 필터링 및 D-Day 계산
+          const upcoming = data
+            .map((test: any) => {
+              const startDate = new Date(test.startDate)
+              startDate.setHours(0, 0, 0, 0)
+              
+              const diffTime = startDate.getTime() - now.getTime()
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) // 일수 차이 계산
+
+              return { ...test, diffDays, startDateObj: startDate }
+            })
+            .filter((test: any) => test.diffDays >= 0) // 오늘 이후 시험만
+            .sort((a: any, b: any) => a.diffDays - b.diffDays) // 가까운 날짜 순
+            .slice(0, 5) // 5개만 표시
+
+          setUpcomingTests(upcoming)
+        }
+
       } catch (error) {
-        console.error("공지사항 로딩 실패", error)
+        console.error("Dashboard Load Error:", error)
       } finally {
-        setLoadingNotices(false)
+        setIsLoading(false)
       }
     }
-
-    fetchNotices()
+    fetchData()
   }, [])
 
+  // 날짜 포맷 함수 (YYYY.MM.DD)
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-  }
-
-  const isNew = (dateString: string) => {
-    const today = new Date();
-    const date = new Date(dateString);
-    const diffTime = Math.abs(today.getTime() - date.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays <= 3;
-  }
-
-  const handleNoticeClick = (notice: Notice) => {
-    setSelectedNotice(notice)
-    setIsDialogOpen(true)
+    const d = new Date(dateString)
+    return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div className="p-4 md:p-8 space-y-8 max-w-7xl mx-auto animate-in fade-in duration-500">
       
-      {/* 1. 상단 환영 메시지 */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-          반갑습니다, <span className="text-blue-600 dark:text-blue-400">{userName}</span>님! 👋
+      {/* 1. 웰컴 메시지 */}
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white">
+          반가워요, <span className="text-violet-600">{user?.name || "학생"}</span>님! 👋
         </h1>
-        <p className="text-slate-500 dark:text-slate-400">
-          오늘도 목표를 향해 힘차게 나아가 봅시다.
-        </p>
+        <p className="text-slate-500 text-sm md:text-base">오늘도 즐거운 학습 되세요.</p>
       </div>
 
-      {/* 2. 바로가기 카드 섹션 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Link href="/dashboard/videos" className="group">
-          <Card className="h-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-500 dark:hover:border-blue-500 transition-all hover:shadow-md cursor-pointer group-hover:-translate-y-1">
-            <CardHeader>
-              <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mb-4 group-hover:bg-blue-600 transition-colors">
-                <PlayCircle className="w-6 h-6 text-blue-600 dark:text-blue-400 group-hover:text-white transition-colors" />
-              </div>
-              <CardTitle className="text-xl text-slate-900 dark:text-white">학습 시작하기</CardTitle>
-              <CardDescription className="text-slate-500 dark:text-slate-400 mt-2">
-                지난 시간에 이어 강의를 시청하세요.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </Link>
-
-        <Link href="/dashboard/resources" className="group">
-          <Card className="h-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-purple-500 dark:hover:border-purple-500 transition-all hover:shadow-md cursor-pointer group-hover:-translate-y-1">
-            <CardHeader>
-              <div className="w-12 h-12 rounded-2xl bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mb-4 group-hover:bg-purple-600 transition-colors">
-                <FileText className="w-6 h-6 text-purple-600 dark:text-purple-400 group-hover:text-white transition-colors" />
-              </div>
-              <CardTitle className="text-xl text-slate-900 dark:text-white">자료실 이동</CardTitle>
-              <CardDescription className="text-slate-500 dark:text-slate-400 mt-2">
-                필요한 학습 자료를 다운로드하세요.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </Link>
-        
-        <Link href="/dashboard/qna" className="group">
-          <Card className="h-full border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-emerald-500 dark:hover:border-emerald-500 transition-all hover:shadow-md cursor-pointer group-hover:-translate-y-1">
-            <CardHeader>
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-4 group-hover:bg-emerald-600 transition-colors">
-                <MessageCircle className="w-6 h-6 text-emerald-600 dark:text-emerald-400 group-hover:text-white transition-colors" />
-              </div>
-              <CardTitle className="text-xl text-slate-900 dark:text-white">질문하기</CardTitle>
-              <CardDescription className="text-slate-500 dark:text-slate-400 mt-2">
-                궁금한 내용을 선생님께 질문하세요.
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </Link>
-      </div>
-
-      {/* 3. 공지사항 섹션 */}
+      {/* 2. 메인 컨텐츠 그리드 (공지사항 vs 다가올 시험) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-xl text-slate-900 dark:text-white flex items-center gap-2">
-              <Bell className="w-5 h-5 text-yellow-500" />
-              최신 공지사항
-            </CardTitle>
-            <Link href="/dashboard/notices">
-              <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
-                더보기 <ChevronRight className="w-4 h-4 ml-1" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3 mt-4">
-              {loadingNotices ? (
-                <div className="flex justify-center py-8 text-slate-500">
-                   <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                   불러오는 중...
-                </div>
-              ) : notices.length > 0 ? (
-                notices.map((notice) => (
-                  <div 
-                    key={notice._id} 
-                    onClick={() => handleNoticeClick(notice)}
-                    className="block group cursor-pointer"
-                  >
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        {isNew(notice.createdAt) && <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />}
-                        <span className="text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate font-medium">
-                          {notice.title}
-                        </span>
-                      </div>
-                      <span className="text-xs text-slate-500 dark:text-slate-500 shrink-0 ml-2">
-                        {formatDate(notice.createdAt)}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-8 text-slate-500 dark:text-slate-400">
-                  등록된 공지사항이 없습니다.
-                </div>
-              )}
+        
+        {/* [왼쪽] 최신 공지사항 */}
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 h-full">
+          <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Bell className="w-5 h-5 text-yellow-500 fill-yellow-500" /> 최신 공지사항
+              </CardTitle>
+              <Link href="/dashboard/notices">
+                <Button variant="ghost" size="sm" className="text-xs text-slate-400 hover:text-slate-600 h-8">
+                  더보기 <ChevronRight className="w-3 h-3 ml-1" />
+                </Button>
+              </Link>
             </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />)}
+              </div>
+            ) : notices.length > 0 ? (
+              <ul className="space-y-1">
+                {notices.map((notice) => (
+                  <li key={notice._id}>
+                    <Link 
+                      href={`/dashboard/notices/${notice._id}`}
+                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group"
+                    >
+                      <div className="shrink-0">
+                        {notice.isImportant ? (
+                          <Pin className="w-4 h-4 text-red-500 fill-red-500 rotate-45" />
+                        ) : (
+                          <div className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-violet-400 transition-colors" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={cn("text-sm font-medium truncate", notice.isImportant ? "text-slate-900 dark:text-white font-bold" : "text-slate-600 dark:text-slate-300")}>
+                          {notice.title}
+                        </p>
+                      </div>
+                      <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(notice.createdAt)}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div className="h-40 flex flex-col items-center justify-center text-slate-400">
+                <Bell className="w-8 h-8 mb-2 opacity-20" />
+                <p className="text-sm">등록된 공지사항이 없습니다.</p>
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        {/* [오른쪽] 다가올 시험 일정 */}
+        <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 h-full">
+          <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-violet-600" /> 다가올 시험
+              </CardTitle>
+              <Link href="/dashboard/calendar">
+                <Button variant="ghost" size="sm" className="text-xs text-slate-400 hover:text-slate-600 h-8">
+                  달력 보기 <ChevronRight className="w-3 h-3 ml-1" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => <div key={i} className="h-12 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />)}
+              </div>
+            ) : upcomingTests.length > 0 ? (
+              <div className="space-y-3">
+                {upcomingTests.map((test) => (
+                  <Link href={`/test/${test._id}`} key={test._id}>
+                    <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-violet-200 dark:hover:border-violet-900 hover:shadow-md transition-all bg-white dark:bg-slate-950 group">
+                      <div className="flex items-center gap-4">
+                        <div className={cn(
+                          "flex flex-col items-center justify-center w-12 h-12 rounded-lg font-bold shadow-sm shrink-0",
+                          test.diffDays === 0 
+                            ? "bg-red-500 text-white" // D-Day
+                            : test.diffDays <= 3 
+                              ? "bg-orange-100 text-orange-600" // 임박
+                              : "bg-slate-100 text-slate-500" // 여유
+                        )}>
+                          <span className="text-[10px] leading-none opacity-80">D-</span>
+                          <span className="text-lg leading-none">{test.diffDays === 0 ? "Day" : test.diffDays}</span>
+                        </div>
+                        
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-900 dark:text-white group-hover:text-violet-600 transition-colors">
+                            {test.title}
+                          </span>
+                          <div className="flex items-center gap-2 text-xs text-slate-500">
+                            <Clock className="w-3 h-3" />
+                            <span>{formatDate(test.startDate)} 시행</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-violet-500 transition-colors" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <div className="h-40 flex flex-col items-center justify-center text-slate-400">
+                <Trophy className="w-8 h-8 mb-2 opacity-20" />
+                <p className="text-sm">예정된 시험이 없습니다.</p>
+                <p className="text-xs mt-1">편안한 하루 되세요!</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold break-keep">
-              {selectedNotice?.title}
-            </DialogTitle>
-            <DialogDescription className="text-sm text-slate-500 mt-1">
-              {selectedNotice && formatDate(selectedNotice.createdAt)}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="mt-4 text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed max-h-[60vh] overflow-y-auto">
-            {selectedNotice?.content}
-          </div>
-          
-          <DialogFooter>
-            <DialogClose asChild>
-                <Button type="button" variant="secondary" className="w-full sm:w-auto">닫기</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Link href="/dashboard/contents" className="group p-6 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors flex flex-col items-center gap-2 text-center border border-blue-100 dark:border-blue-800">
+          <BookOpen className="w-8 h-8 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform" />
+          <span className="font-bold text-blue-900 dark:text-blue-100">자료실</span>
+        </Link>
+        
+        <Link href="/dashboard/videos" className="group p-6 bg-violet-50 dark:bg-violet-900/20 rounded-2xl hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors flex flex-col items-center gap-2 text-center border border-violet-100 dark:border-violet-800">
+          <Clock className="w-8 h-8 text-violet-600 dark:text-violet-400 group-hover:scale-110 transition-transform" />
+          <span className="font-bold text-violet-900 dark:text-violet-100">복습 영상</span>
+        </Link>
+        
+        <Link href="/dashboard/test" className="group p-6 bg-pink-50 dark:bg-pink-900/20 rounded-2xl hover:bg-pink-100 dark:hover:bg-pink-900/30 transition-colors flex flex-col items-center gap-2 text-center border border-pink-100 dark:border-pink-800">
+          <Trophy className="w-8 h-8 text-pink-600 dark:text-pink-400 group-hover:scale-110 transition-transform" />
+          <span className="font-bold text-pink-900 dark:text-pink-100">시험 응시</span>
+        </Link>
+        
+        <Link href="/dashboard/qna" className="group p-6 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors flex flex-col items-center gap-2 text-center border border-emerald-100 dark:border-emerald-800">
+          <MessageCircle className="w-8 h-8 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+          <span className="font-bold text-emerald-900 dark:text-emerald-100">QNA</span>
+        </Link>
+      </div>
 
     </div>
   )
