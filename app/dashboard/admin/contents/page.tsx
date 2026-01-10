@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-// ✅ Vercel Blob 클라이언트 업로드
+// Vercel Blob 클라이언트 업로드
 import { upload } from "@vercel/blob/client" 
 
 import { Input } from "@/components/ui/input"
@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { 
   Search, FileText, Video, Bell, Trash2, Youtube, Download, 
-  Pencil, Loader2, BookOpen, Paperclip, X, ChevronLeft, ChevronRight
+  Pencil, Loader2, BookOpen, Paperclip, X, ChevronLeft, ChevronRight, ImageIcon
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
@@ -28,7 +28,7 @@ import { useToast } from "@/hooks/use-toast"
 // 페이지당 아이템 수 설정
 const ITEMS_PER_PAGE = 10
 
-// ✅ [추가] 카테고리 한글 변환 맵
+// 카테고리 한글 변환 맵
 const categoryMap: Record<string, string> = {
   grammar: "문법",
   reading: "독해",
@@ -69,17 +69,18 @@ export default function AdminContentsPage() {
   
   // 3. 공지 폼
   const [noticeForm, setNoticeForm] = useState({ title: "", content: "", isImportant: false, target: "all" })
-  // 4. 커리큘럼 폼
-  const [courseForm, setCourseForm] = useState({ title: "", description: "", category: "grammar", customCategory: "", level: "초급", intro: "", curriculum: "" })
+  
+  // 4. [수정] 커리큘럼 폼 (thumbnail 추가)
+  const [courseForm, setCourseForm] = useState({ title: "", description: "", category: "grammar", customCategory: "", level: "초급", intro: "", curriculum: "", thumbnail: "" })
+  const [courseThumbnailFile, setCourseThumbnailFile] = useState<File | null>(null) // 업로드할 파일
 
   // 데이터 로딩 최적화 (선택된 탭만 로딩)
   const fetchAllData = async () => {
     setIsLoading(true)
     try {
-      // TS 오류 방지를 위해 타입 명시 (: any[])
+      // TS 오류 방지를 위해 타입 명시
       let videos: any[] = [], resources: any[] = [], notices: any[] = [], courses: any[] = []
 
-      // 탭에 따라 필요한 API만 병렬 호출
       const promises = []
       
       if (activeTypeTab === "all" || activeTypeTab === "video") promises.push(fetch("/api/contents", { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(d => videos = d))
@@ -109,13 +110,11 @@ export default function AdminContentsPage() {
     }
   }
 
-  // 탭이 바뀔 때마다 데이터 새로고침 및 페이지 초기화
   useEffect(() => { 
     fetchAllData()
     setCurrentPage(1)
   }, [activeTypeTab])
 
-  // 검색 시 페이지 초기화
   useEffect(() => {
     setCurrentPage(1)
   }, [searchTerm])
@@ -135,7 +134,9 @@ export default function AdminContentsPage() {
     setExistingFiles([])
     if(fileInputRef.current) fileInputRef.current.value = ""
     setNoticeForm({ title: "", content: "", isImportant: false, target: "all" })
-    setCourseForm({ title: "", description: "", category: "grammar", customCategory: "", level: "초급", intro: "", curriculum: "" })
+    // [수정] 초기화 시 썸네일도 초기화
+    setCourseForm({ title: "", description: "", category: "grammar", customCategory: "", level: "초급", intro: "", curriculum: "", thumbnail: "" })
+    setCourseThumbnailFile(null)
   }
 
   const handleEditClick = (item: any) => {
@@ -170,7 +171,8 @@ export default function AdminContentsPage() {
         title: item.title, description: item.description, level: item.level, intro: item.intro,
         curriculum: item.curriculum ? item.curriculum.join("\n") : "",
         category: isCustom ? "direct" : item.category,
-        customCategory: isCustom ? item.category : ""
+        customCategory: isCustom ? item.category : "",
+        thumbnail: item.thumbnail || "" // 기존 썸네일 불러오기
       })
       setModalOpen({ ...modalOpen, course: true })
     }
@@ -271,15 +273,52 @@ export default function AdminContentsPage() {
     closeModal(); fetchAllData(); toast({ title: "저장 완료" })
   }
 
+  // ✅ [수정] 커리큘럼 저장 함수 (썸네일 업로드 포함)
   const saveCourse = async () => {
-    const finalCategory = courseForm.category === "direct" ? courseForm.customCategory : courseForm.category
-    const body = {
-      title: courseForm.title, description: courseForm.description, level: courseForm.level, 
-      intro: courseForm.intro, curriculum: courseForm.curriculum.split("\n"),
-      category: finalCategory, ...(editingId && { id: editingId })
+    setIsUploading(true)
+    try {
+        const finalCategory = courseForm.category === "direct" ? courseForm.customCategory : courseForm.category
+        
+        // 1. 썸네일 이미지 업로드 (파일이 있는 경우에만)
+        let thumbnailUrl = courseForm.thumbnail
+        if (courseThumbnailFile) {
+            const checkRes = await fetch(`/api/upload?filename=${encodeURIComponent(courseThumbnailFile.name)}`);
+            const { uniqueName } = await checkRes.json();
+            const newBlob = await upload(uniqueName, courseThumbnailFile, {
+                access: 'public',
+                handleUploadUrl: '/api/upload', 
+            });
+            thumbnailUrl = newBlob.url
+        }
+
+        // 2. DB 저장
+        const body = {
+            title: courseForm.title, 
+            description: courseForm.description, 
+            level: courseForm.level, 
+            intro: courseForm.intro, 
+            curriculum: courseForm.curriculum.split("\n"),
+            category: finalCategory, 
+            thumbnail: thumbnailUrl, // 썸네일 URL 추가
+            ...(editingId && { id: editingId })
+        }
+        
+        await fetch("/api/courses", { 
+            method: editingId ? "PUT" : "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify(body) 
+        })
+        
+        closeModal()
+        await fetchAllData()
+        toast({ title: "저장 완료" })
+
+    } catch (e) {
+        console.error(e)
+        toast({ title: "저장 실패", variant: "destructive" })
+    } finally {
+        setIsUploading(false)
     }
-    await fetch("/api/courses", { method: editingId ? "PUT" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
-    closeModal(); fetchAllData(); toast({ title: "저장 완료" })
   }
 
   return (
@@ -343,7 +382,6 @@ export default function AdminContentsPage() {
                             {item.type === 'notice' ? (
                                 item.category === '중요' ? <Badge className="bg-red-500 hover:bg-red-600 border-0">중요(필독)</Badge> : <Badge variant="secondary">일반</Badge>
                             ) : (
-                                // ✅ [수정] categoryMap을 사용하여 한글로 표시, 없으면 원래 값 표시
                                 <Badge variant="outline">{categoryMap[item.category] || item.category}</Badge>
                             )}
                             </TableCell>
@@ -510,7 +548,7 @@ export default function AdminContentsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 4. 커리큘럼 모달 */}
+      {/* 4. 커리큘럼 모달 (썸네일 업로드 추가됨) */}
       <Dialog open={modalOpen.course} onOpenChange={(o) => !o && closeModal()}>
         <DialogContent className="sm:max-w-[500px] max-h-[80vh] overflow-y-auto gap-6">
           <DialogHeader><DialogTitle>{editingId ? "커리큘럼 수정" : "커리큘럼 등록"}</DialogTitle></DialogHeader>
@@ -536,11 +574,39 @@ export default function AdminContentsPage() {
                   <SelectContent><SelectItem value="초급">초급</SelectItem><SelectItem value="중급">중급</SelectItem><SelectItem value="고급">고급</SelectItem></SelectContent>
               </Select>
             </div>
+            
+            {/* ✅ [추가됨] 썸네일 업로드 필드 */}
+            <div className="space-y-3">
+                <Label>썸네일 이미지 (선택)</Label>
+                <div className="flex flex-col gap-2">
+                    {courseForm.thumbnail && !courseThumbnailFile && (
+                        <div className="relative w-full h-32 rounded-lg overflow-hidden border border-slate-200">
+                            <img src={courseForm.thumbnail} alt="Thumbnail" className="w-full h-full object-cover" />
+                            <Button size="icon" variant="destructive" className="absolute top-2 right-2 h-6 w-6" onClick={() => setCourseForm({...courseForm, thumbnail: ""})}>
+                                <X className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    )}
+                    <Input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                                setCourseThumbnailFile(e.target.files[0]);
+                            }
+                        }} 
+                    />
+                    {courseThumbnailFile && (
+                        <p className="text-xs text-blue-500">선택된 파일: {courseThumbnailFile.name}</p>
+                    )}
+                </div>
+            </div>
+
             <div className="space-y-3"><Label>한줄 요약</Label><Input value={courseForm.description} onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })} /></div>
             <div className="space-y-3"><Label>상세 소개</Label><Textarea value={courseForm.intro} onChange={(e) => setCourseForm({ ...courseForm, intro: e.target.value })} /></div>
             <div className="space-y-3"><Label>커리큘럼 (줄바꿈)</Label><Textarea value={courseForm.curriculum} onChange={(e) => setCourseForm({ ...courseForm, curriculum: e.target.value })} placeholder="1주차: ...&#13;&#10;2주차: ..." className="min-h-[100px]" /></div>
           </div>
-          <DialogFooter><Button onClick={saveCourse}>저장</Button></DialogFooter>
+          <DialogFooter><Button onClick={saveCourse} disabled={isUploading}>{isUploading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin"/>저장 중</> : "저장"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 

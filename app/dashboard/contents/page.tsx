@@ -25,7 +25,7 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog"
-import { Search, Filter, BookOpen, CheckCircle, Star, BarChart, Loader2 } from "lucide-react"
+import { Search, Filter, BookOpen, CheckCircle, Star, BarChart, Loader2, ImageIcon } from "lucide-react"
 
 // DB 데이터 타입 정의
 interface Course {
@@ -37,6 +37,7 @@ interface Course {
   color: string
   intro: string
   curriculum: string[]
+  thumbnail?: string // ✅ [추가] 썸네일 이미지 필드 (없을 수도 있음)
 }
 
 export default function ContentsPage() {
@@ -47,20 +48,19 @@ export default function ContentsPage() {
   const [contents, setContents] = useState<Course[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  // [추가] 동적 카테고리 목록 상태
+  // 동적 카테고리 목록 상태
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([])
 
   // API에서 커리큘럼 데이터 가져오기
   useEffect(() => {
     const fetchCourses = async () => {
       try {
-        // cache: 'no-store'로 최신 데이터 불러오기
         const res = await fetch("/api/courses", { cache: 'no-store' })
         if (res.ok) {
           const data = await res.json()
           setContents(data)
 
-          // [핵심] DB 데이터에서 카테고리만 뽑아서 중복 제거 (필터용)
+          // DB 데이터에서 카테고리만 뽑아서 중복 제거
           const categories = Array.from(new Set(data.map((item: any) => item.category))) as string[]
           setUniqueCategories(categories)
         }
@@ -110,7 +110,6 @@ export default function ContentsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">전체 보기</SelectItem>
-              {/* [수정] DB에 있는 카테고리만 자동으로 표시 */}
               {uniqueCategories.map((cat) => (
                 <SelectItem key={cat} value={cat}>{cat}</SelectItem>
               ))}
@@ -130,18 +129,36 @@ export default function ContentsPage() {
             <Dialog key={content._id}>
               <DialogTrigger asChild>
                 <Card className="group overflow-hidden cursor-pointer border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-lg transition-all duration-300">
-                  {/* 상단 그라데이션 영역 */}
-                  <div className={`h-40 w-full bg-gradient-to-br ${content.color || "from-slate-500 to-slate-400"} flex items-center justify-center relative overflow-hidden`}>
-                    <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
-                    <BookOpen className="text-white w-12 h-12 opacity-80 group-hover:scale-110 transition-transform duration-500" />
-                    <Badge className="absolute top-3 right-3 bg-black/40 backdrop-blur-md hover:bg-black/60 border-0">
+                  
+                  {/* ✅ [수정] 썸네일 영역: 이미지가 있으면 이미지, 없으면 기존 그라데이션 */}
+                  <div className="h-44 w-full relative overflow-hidden bg-slate-100 dark:bg-slate-800">
+                    {content.thumbnail ? (
+                      <>
+                        <img 
+                          src={content.thumbnail} 
+                          alt={content.title} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                        {/* 텍스트 가독성을 위한 은은한 오버레이 */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+                      </>
+                    ) : (
+                      // 썸네일 없을 때: 기존 그라데이션 배경
+                      <div className={`h-full w-full bg-gradient-to-br ${content.color || "from-slate-500 to-slate-400"} flex items-center justify-center`}>
+                         <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
+                         <BookOpen className="text-white w-12 h-12 opacity-80 group-hover:scale-110 transition-transform duration-500" />
+                      </div>
+                    )}
+
+                    {/* 레벨 뱃지 (우측 상단) */}
+                    <Badge className="absolute top-3 right-3 bg-black/50 backdrop-blur-md text-white border-0 hover:bg-black/70">
                       {content.level}
                     </Badge>
                   </div>
                   
-                  <CardHeader className="pb-2">
+                  <CardHeader className="pb-2 pt-4">
                     <div className="flex justify-between items-start">
-                      <div className="space-y-1">
+                      <div className="space-y-1 w-full">
                         <Badge variant="outline" className="mb-2 text-slate-500 border-slate-300 dark:border-slate-700 capitalize">
                           {content.category}
                         </Badge>
@@ -165,13 +182,25 @@ export default function ContentsPage() {
               </DialogTrigger>
 
               <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 overflow-hidden p-0">
-                <div className={`h-32 w-full bg-gradient-to-r ${content.color || "from-slate-500 to-slate-400"} p-6 flex items-end`}>
-                  <div className="flex items-center gap-3">
-                      <BookOpen className="text-white w-8 h-8" />
-                      <DialogTitle className="text-2xl font-bold text-white shadow-sm">
-                        {content.title}
-                      </DialogTitle>
-                  </div>
+                {/* ✅ [수정] 모달 헤더: 이미지가 있으면 이미지 배경, 없으면 그라데이션 */}
+                <div className="relative h-48 w-full">
+                    {content.thumbnail ? (
+                        <>
+                            <img src={content.thumbnail} alt={content.title} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent" />
+                        </>
+                    ) : (
+                        <div className={`h-full w-full bg-gradient-to-r ${content.color || "from-slate-500 to-slate-400"}`} />
+                    )}
+                    
+                    <div className="absolute bottom-0 left-0 p-6 w-full">
+                        <div className="flex items-center gap-3">
+                            {!content.thumbnail && <BookOpen className="text-white w-8 h-8" />}
+                            <DialogTitle className="text-2xl font-bold text-white shadow-sm drop-shadow-md">
+                                {content.title}
+                            </DialogTitle>
+                        </div>
+                    </div>
                 </div>
                 
                 <DialogDescription className="sr-only">
@@ -197,7 +226,7 @@ export default function ContentsPage() {
                         <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                         강의 소개
                       </h3>
-                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-sm">
+                      <p className="text-slate-600 dark:text-slate-300 leading-relaxed text-sm whitespace-pre-wrap">
                         {content.intro || content.description}
                       </p>
                     </div>

@@ -28,6 +28,10 @@ const CourseSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
+  thumbnail: {
+    type: String, 
+    required: false, 
+  },
   createdAt: {
     type: Date,
     default: Date.now,

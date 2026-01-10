@@ -267,7 +267,7 @@ function CreateOMRContent() {
                 </div>
             </div>
 
-            {/* 오른쪽: 일시 설정 (완전 분리형 세로 배치) */}
+            {/* 오른쪽: 일시 설정 */}
             <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 space-y-4">
                 
                 {/* 1열: 시작 일시 */}
@@ -352,7 +352,7 @@ function CreateOMRContent() {
             </div>
         </div>
 
-        {/* 3. 하단: OMR 생성 및 설정 (반응형: 줄바꿈 대응) */}
+        {/* 3. 하단: OMR 생성 및 설정 */}
         <div className="space-y-4">
             <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 
@@ -380,34 +380,55 @@ function CreateOMRContent() {
                 </div>
             </div>
             
+            {/* 문항 입력 영역: 모바일 2줄 / 데스크탑 1줄 */}
             {questions.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
                     {questions.map((q, idx) => (
-                        <div key={idx} className="flex items-center gap-3 bg-white dark:bg-slate-900 p-3 md:p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                        <div key={idx} className="flex flex-wrap md:flex-nowrap items-center gap-3 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
                             
-                            <span className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300 shrink-0 border border-slate-200 dark:border-slate-700">
-                                {q.id}
-                            </span>
+                            {/* 1. 윗줄 (모바일) / 왼쪽 (데스크탑): 번호, 유형, 점수, 삭제 */}
+                            <div className="flex items-center justify-between w-full md:w-auto md:justify-start gap-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-slate-600 dark:text-slate-300 shrink-0 border border-slate-200 dark:border-slate-700 text-sm">
+                                        {q.id}
+                                    </span>
+                                    <Select value={q.type} onValueChange={(val: "CHOICE" | "TEXT") => updateQuestion(idx, "type", val)}>
+                                        <SelectTrigger className="w-[85px] h-9 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="CHOICE">객관식</SelectItem>
+                                            <SelectItem value="TEXT">주관식</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
 
-                            <Select value={q.type} onValueChange={(val: "CHOICE" | "TEXT") => updateQuestion(idx, "type", val)}>
-                                <SelectTrigger className="w-[90px] h-9 text-xs bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="CHOICE">객관식</SelectItem>
-                                    <SelectItem value="TEXT">주관식</SelectItem>
-                                </SelectContent>
-                            </Select>
+                                {/* 모바일용 점수 & 삭제 (우측 정렬) */}
+                                <div className="flex md:hidden items-center gap-2">
+                                    <span className="text-xs text-slate-400">점수</span>
+                                    <Input 
+                                        type="number" 
+                                        value={q.score} 
+                                        onChange={(e) => handleNumberChange(e.target.value, (val) => updateQuestion(idx, "score", val))} 
+                                        className="w-12 h-9 text-center px-1 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700" 
+                                    />
+                                    <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => removeQuestion(idx)}>
+                                        <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                </div>
+                            </div>
 
-                            <div className="flex-1 min-w-0">
+                            {/* 2. 아랫줄 (모바일) / 중간 (데스크탑): 정답 입력 */}
+                            <div className="w-full md:flex-1 min-w-0 mt-1 md:mt-0 order-last md:order-none">
                                 {q.type === "CHOICE" ? (
-                                    <div className="flex justify-between gap-1">
+                                    <div className="grid grid-cols-5 gap-2 md:flex md:gap-1">
                                         {[1, 2, 3, 4, 5].map((num) => (
                                             <button
                                                 key={num}
                                                 onClick={() => updateQuestion(idx, "correctAnswer", String(num))}
                                                 className={cn(
-                                                    "flex-1 h-9 rounded-md text-sm font-bold border transition-all",
+                                                    // ✅ 모바일에서 버튼 크기 대폭 확대 (h-12, text-lg)
+                                                    "h-14 md:h-9 md:flex-1 rounded-lg md:rounded-md text-xl md:text-sm font-bold border transition-all touch-manipulation",
                                                     q.correctAnswer === String(num) 
                                                         ? "bg-violet-600 text-white border-violet-600 shadow-md" 
                                                         : "bg-white dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 hover:border-violet-300 dark:hover:border-violet-500 hover:text-violet-500"
@@ -418,17 +439,28 @@ function CreateOMRContent() {
                                         ))}
                                     </div>
                                 ) : (
-                                    <Input placeholder="정답 입력" value={q.correctAnswer} onChange={(e) => updateQuestion(idx, "correctAnswer", e.target.value)} className="h-9 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 placeholder:text-slate-400" />
+                                    <Input 
+                                        placeholder="정답 입력" 
+                                        value={q.correctAnswer} 
+                                        onChange={(e) => updateQuestion(idx, "correctAnswer", e.target.value)} 
+                                        className="h-14 md:h-9 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 placeholder:text-slate-400 text-lg md:text-sm px-4 md:px-3" 
+                                    />
                                 )}
                             </div>
 
-                            <div className="w-12 md:w-14 shrink-0">
-                                <Input type="number" value={q.score} onChange={(e) => handleNumberChange(e.target.value, (val) => updateQuestion(idx, "score", val))} className="h-9 text-center px-1 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700" />
+                            {/* 데스크탑용 점수 & 삭제 (모바일 숨김) */}
+                            <div className="hidden md:flex items-center gap-2 shrink-0">
+                                <Input 
+                                    type="number" 
+                                    value={q.score} 
+                                    onChange={(e) => handleNumberChange(e.target.value, (val) => updateQuestion(idx, "score", val))} 
+                                    className="w-14 h-9 text-center px-1 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700" 
+                                />
+                                <Button variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" onClick={() => removeQuestion(idx)}>
+                                    <Trash2 className="w-4 h-4" />
+                                </Button>
                             </div>
 
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 shrink-0" onClick={() => removeQuestion(idx)}>
-                                <Trash2 className="w-4 h-4" />
-                            </Button>
                         </div>
                     ))}
                 </div>
@@ -440,7 +472,7 @@ function CreateOMRContent() {
         </div>
 
         <div className="flex justify-center pt-4 pb-24">
-            <Button onClick={addQuestion} variant="outline" className="h-10 px-6 rounded-full border-dashed border-2 border-slate-300 dark:border-slate-600 text-slate-500 hover:text-violet-600 hover:border-violet-400 bg-transparent">
+            <Button onClick={addQuestion} variant="outline" className="h-12 md:h-10 px-6 rounded-full border-dashed border-2 border-slate-300 dark:border-slate-600 text-slate-500 hover:text-violet-600 hover:border-violet-400 bg-transparent text-base md:text-sm">
                 <Plus className="w-4 h-4 mr-2" /> 1문제 추가
             </Button>
         </div>
