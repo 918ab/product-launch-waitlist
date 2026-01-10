@@ -27,6 +27,14 @@ import {
 } from "@/components/ui/dialog"
 import { Search, Filter, BookOpen, CheckCircle, Star, BarChart, Loader2, ImageIcon } from "lucide-react"
 
+// ✅ [추가] 카테고리 한글 변환 맵
+const categoryMap: Record<string, string> = {
+  grammar: "문법",
+  reading: "독해",
+  listening: "듣기",
+  vocabulary: "어휘",
+};
+
 // DB 데이터 타입 정의
 interface Course {
   _id: string
@@ -37,21 +45,17 @@ interface Course {
   color: string
   intro: string
   curriculum: string[]
-  thumbnail?: string // ✅ [추가] 썸네일 이미지 필드 (없을 수도 있음)
+  thumbnail?: string 
 }
 
 export default function ContentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   
-  // DB 데이터를 담을 State
   const [contents, setContents] = useState<Course[]>([])
   const [isLoading, setIsLoading] = useState(true)
-
-  // 동적 카테고리 목록 상태
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([])
 
-  // API에서 커리큘럼 데이터 가져오기
   useEffect(() => {
     const fetchCourses = async () => {
       try {
@@ -59,8 +63,6 @@ export default function ContentsPage() {
         if (res.ok) {
           const data = await res.json()
           setContents(data)
-
-          // DB 데이터에서 카테고리만 뽑아서 중복 제거
           const categories = Array.from(new Set(data.map((item: any) => item.category))) as string[]
           setUniqueCategories(categories)
         }
@@ -89,7 +91,6 @@ export default function ContentsPage() {
         </p>
       </div>
 
-      {/* 검색 및 필터 */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -110,15 +111,17 @@ export default function ContentsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">전체 보기</SelectItem>
+              {/* ✅ [수정] 필터 목록 한글로 변환 */}
               {uniqueCategories.map((cat) => (
-                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                <SelectItem key={cat} value={cat}>
+                  {categoryMap[cat] || cat}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      {/* 컨텐츠 리스트 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
           <div className="col-span-full flex justify-center py-20">
@@ -130,28 +133,23 @@ export default function ContentsPage() {
               <DialogTrigger asChild>
                 <Card className="group overflow-hidden cursor-pointer border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-lg transition-all duration-300">
                   
-                  {/* ✅ [수정] 썸네일 영역: 이미지가 있으면 이미지, 없으면 기존 그라데이션 */}
-                  <div className="h-44 w-full relative overflow-hidden bg-slate-100 dark:bg-slate-800">
+                  <div className="h-60 w-full relative overflow-hidden bg-slate-100 dark:bg-slate-800">
                     {content.thumbnail ? (
                       <>
                         <img 
                           src={content.thumbnail} 
                           alt={content.title} 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
-                        {/* 텍스트 가독성을 위한 은은한 오버레이 */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
                       </>
                     ) : (
-                      // 썸네일 없을 때: 기존 그라데이션 배경
                       <div className={`h-full w-full bg-gradient-to-br ${content.color || "from-slate-500 to-slate-400"} flex items-center justify-center`}>
-                         <div className="absolute inset-0 bg-black/10 group-hover:bg-transparent transition-colors" />
-                         <BookOpen className="text-white w-12 h-12 opacity-80 group-hover:scale-110 transition-transform duration-500" />
+                         <BookOpen className="text-white w-12 h-12 opacity-80" />
                       </div>
                     )}
 
-                    {/* 레벨 뱃지 (우측 상단) */}
-                    <Badge className="absolute top-3 right-3 bg-black/50 backdrop-blur-md text-white border-0 hover:bg-black/70">
+                    <Badge className="absolute top-3 right-3 bg-black/50 backdrop-blur-md text-white border-0">
                       {content.level}
                     </Badge>
                   </div>
@@ -159,8 +157,9 @@ export default function ContentsPage() {
                   <CardHeader className="pb-2 pt-4">
                     <div className="flex justify-between items-start">
                       <div className="space-y-1 w-full">
+                        {/* ✅ [수정] 카드 내부 카테고리 뱃지 한글화 */}
                         <Badge variant="outline" className="mb-2 text-slate-500 border-slate-300 dark:border-slate-700 capitalize">
-                          {content.category}
+                          {categoryMap[content.category] || content.category}
                         </Badge>
                         <CardTitle className="text-xl text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-1">
                           {content.title}
@@ -182,8 +181,7 @@ export default function ContentsPage() {
               </DialogTrigger>
 
               <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 overflow-hidden p-0">
-                {/* ✅ [수정] 모달 헤더: 이미지가 있으면 이미지 배경, 없으면 그라데이션 */}
-                <div className="relative h-48 w-full">
+                <div className="relative h-64 w-full">
                     {content.thumbnail ? (
                         <>
                             <img src={content.thumbnail} alt={content.title} className="w-full h-full object-cover" />
@@ -204,11 +202,10 @@ export default function ContentsPage() {
                 </div>
                 
                 <DialogDescription className="sr-only">
-                  {content.title} 강의 상세 정보입니다.
+                  {content.title} 상세 정보
                 </DialogDescription>
 
                 <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                  
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="secondary" className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1">
                       <BarChart className="w-3 h-3 mr-1" />
@@ -216,7 +213,8 @@ export default function ContentsPage() {
                     </Badge>
                     <Badge variant="secondary" className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-3 py-1 capitalize">
                       <Filter className="w-3 h-3 mr-1" />
-                      분류: {content.category}
+                      {/* ✅ [수정] 모달 내부 카테고리 뱃지 한글화 */}
+                      분류: {categoryMap[content.category] || content.category}
                     </Badge>
                   </div>
 
@@ -250,7 +248,6 @@ export default function ContentsPage() {
                       </div>
                     )}
                   </div>
-
                 </div>
               </DialogContent>
             </Dialog>
@@ -259,7 +256,6 @@ export default function ContentsPage() {
           <div className="col-span-full flex flex-col items-center justify-center py-20 text-slate-500 dark:text-slate-400">
             <Search className="w-12 h-12 mb-4 opacity-20" />
             <p className="text-lg font-medium">등록된 컨텐츠가 없습니다.</p>
-            <p className="text-sm mt-1">다른 검색어나 카테고리를 선택해 보세요.</p>
           </div>
         )}
       </div>
