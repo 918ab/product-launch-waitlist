@@ -3,12 +3,15 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { 
-  Bell, Calendar, ChevronRight, Clock, BookOpen, AlertCircle, Pin, Trophy, MessageCircle 
+  Bell, Calendar, ChevronRight, Clock, BookOpen, AlertCircle, Pin, Trophy, MessageCircle, User 
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger
+} from "@/components/ui/dialog"
 
 export default function StudentDashboardPage() {
   const [user, setUser] = useState<any>(null)
@@ -29,13 +32,12 @@ export default function StudentDashboardPage() {
         const noticeRes = await fetch("/api/notices")
         if (noticeRes.ok) {
           const data = await noticeRes.json()
-          // 중요 공지 우선, 그 다음 최신순 정렬
           const sorted = data.sort((a: any, b: any) => {
             if (a.isImportant === b.isImportant) {
               return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
             }
             return a.isImportant ? -1 : 1
-          }).slice(0, 5) // 5개만 표시
+          }).slice(0, 5) 
           setNotices(sorted)
         }
 
@@ -44,22 +46,21 @@ export default function StudentDashboardPage() {
         if (testRes.ok) {
           const data = await testRes.json()
           const now = new Date()
-          now.setHours(0, 0, 0, 0) // 오늘 날짜 0시 기준
+          now.setHours(0, 0, 0, 0) 
 
-          // 다가올 시험 필터링 및 D-Day 계산
           const upcoming = data
             .map((test: any) => {
               const startDate = new Date(test.startDate)
               startDate.setHours(0, 0, 0, 0)
               
               const diffTime = startDate.getTime() - now.getTime()
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) // 일수 차이 계산
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
 
               return { ...test, diffDays, startDateObj: startDate }
             })
-            .filter((test: any) => test.diffDays >= 0) // 오늘 이후 시험만
-            .sort((a: any, b: any) => a.diffDays - b.diffDays) // 가까운 날짜 순
-            .slice(0, 5) // 5개만 표시
+            .filter((test: any) => test.diffDays >= 0) 
+            .sort((a: any, b: any) => a.diffDays - b.diffDays) 
+            .slice(0, 5) 
 
           setUpcomingTests(upcoming)
         }
@@ -73,7 +74,6 @@ export default function StudentDashboardPage() {
     fetchData()
   }, [])
 
-  // 날짜 포맷 함수 (YYYY.MM.DD)
   const formatDate = (dateString: string) => {
     const d = new Date(dateString)
     return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
@@ -90,10 +90,10 @@ export default function StudentDashboardPage() {
         <p className="text-slate-500 text-sm md:text-base">오늘도 즐거운 학습 되세요.</p>
       </div>
 
-      {/* 2. 메인 컨텐츠 그리드 (공지사항 vs 다가올 시험) */}
+      {/* 2. 메인 컨텐츠 그리드 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* [왼쪽] 최신 공지사항 */}
+        {/* [왼쪽] 최신 공지사항 (다이얼로그 적용) */}
         <Card className="border-slate-200 dark:border-slate-800 shadow-sm bg-white dark:bg-slate-900 h-full">
           <CardHeader className="border-b border-slate-100 dark:border-slate-800 pb-4">
             <div className="flex items-center justify-between">
@@ -113,30 +113,53 @@ export default function StudentDashboardPage() {
                 {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg animate-pulse" />)}
               </div>
             ) : notices.length > 0 ? (
-              <ul className="space-y-1">
+              <div className="space-y-1">
                 {notices.map((notice) => (
-                  <li key={notice._id}>
-                    <Link 
-                      href={`/dashboard/notices/${notice._id}`}
-                      className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group"
-                    >
-                      <div className="shrink-0">
-                        {notice.isImportant ? (
-                          <Pin className="w-4 h-4 text-red-500 fill-red-500 rotate-45" />
-                        ) : (
-                          <div className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-violet-400 transition-colors" />
-                        )}
+                  // ✅ [수정] Link 대신 Dialog 사용
+                  <Dialog key={notice._id}>
+                    <DialogTrigger asChild>
+                      <div className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group cursor-pointer">
+                        <div className="shrink-0">
+                          {notice.isImportant ? (
+                            <Pin className="w-4 h-4 text-red-500 fill-red-500 rotate-45" />
+                          ) : (
+                            <div className="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-violet-400 transition-colors" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("text-sm font-medium truncate", notice.isImportant ? "text-slate-900 dark:text-white font-bold" : "text-slate-600 dark:text-slate-300")}>
+                            {notice.title}
+                          </p>
+                        </div>
+                        <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(notice.createdAt)}</span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={cn("text-sm font-medium truncate", notice.isImportant ? "text-slate-900 dark:text-white font-bold" : "text-slate-600 dark:text-slate-300")}>
-                          {notice.title}
-                        </p>
+                    </DialogTrigger>
+                    
+                    {/* 공지사항 상세 모달 */}
+                    <DialogContent className="max-w-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
+                      <DialogHeader className="space-y-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-2">
+                          {notice.isImportant && <Badge className="bg-red-500">필독</Badge>}
+                          <DialogTitle className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white leading-tight">
+                            {notice.title}
+                          </DialogTitle>
+                        </div>
+                        <DialogDescription className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+                          <span className="flex items-center gap-1.5">
+                            <User className="w-4 h-4" /> 관리자
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <Calendar className="w-4 h-4" /> {formatDate(notice.createdAt)}
+                          </span>
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="mt-4 text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap min-h-[100px]">
+                        {notice.content}
                       </div>
-                      <span className="text-xs text-slate-400 whitespace-nowrap">{formatDate(notice.createdAt)}</span>
-                    </Link>
-                  </li>
+                    </DialogContent>
+                  </Dialog>
                 ))}
-              </ul>
+              </div>
             ) : (
               <div className="h-40 flex flex-col items-center justify-center text-slate-400">
                 <Bell className="w-8 h-8 mb-2 opacity-20" />
@@ -168,16 +191,17 @@ export default function StudentDashboardPage() {
             ) : upcomingTests.length > 0 ? (
               <div className="space-y-3">
                 {upcomingTests.map((test) => (
-                  <Link href={`/test/${test._id}`} key={test._id}>
+                  // ✅ [수정] 시험 목록 페이지(/dashboard/test)로 이동하도록 변경
+                  <Link href="/dashboard/test" key={test._id}>
                     <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-violet-200 dark:hover:border-violet-900 hover:shadow-md transition-all bg-white dark:bg-slate-950 group">
                       <div className="flex items-center gap-4">
                         <div className={cn(
                           "flex flex-col items-center justify-center w-12 h-12 rounded-lg font-bold shadow-sm shrink-0",
                           test.diffDays === 0 
-                            ? "bg-red-500 text-white" // D-Day
+                            ? "bg-red-500 text-white" 
                             : test.diffDays <= 3 
-                              ? "bg-orange-100 text-orange-600" // 임박
-                              : "bg-slate-100 text-slate-500" // 여유
+                              ? "bg-orange-100 text-orange-600" 
+                              : "bg-slate-100 text-slate-500" 
                         )}>
                           <span className="text-[10px] leading-none opacity-80">D-</span>
                           <span className="text-lg leading-none">{test.diffDays === 0 ? "Day" : test.diffDays}</span>
@@ -211,6 +235,7 @@ export default function StudentDashboardPage() {
 
       </div>
 
+      {/* 3. 바로가기 메뉴 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Link href="/dashboard/contents" className="group p-6 bg-blue-50 dark:bg-blue-900/20 rounded-2xl hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors flex flex-col items-center gap-2 text-center border border-blue-100 dark:border-blue-800">
           <BookOpen className="w-8 h-8 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform" />
