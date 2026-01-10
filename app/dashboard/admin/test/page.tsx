@@ -7,11 +7,10 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { 
   ChevronLeft, ChevronRight, Calendar as CalendarIcon, 
-  Clock, Loader2, AlertCircle, Play, Lock, Timer, CheckCircle2, XCircle
+  Plus, Clock, PenLine, Trash2, Loader2, AlertCircle, BarChart3, FileText
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-// 날짜 포맷
 const formatDateStr = (date: Date) => {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -19,66 +18,63 @@ const formatDateStr = (date: Date) => {
   return `${year}-${month}-${day}`
 }
 
-const formatTime = (dateStr: string) => {
-  const d = new Date(dateStr)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+const formatDateTime = (dateStr: string) => {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${year}.${month}.${day} ${hour}:${min}`;
 }
 
-export default function StudentExamCalendarPage() {
+interface Exam {
+  _id: string
+  title: string
+  startDate: string
+  endDate: string
+  questions?: any[] 
+}
+
+export default function AdminExamCalendarPage() {
   const router = useRouter()
   
-  const [exams, setExams] = useState<any[]>([])
-  const [submissions, setSubmissions] = useState<Record<string, any>>({}) // 제출 기록 저장
+  const [exams, setExams] = useState<Exam[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [currentDate, setCurrentDate] = useState(new Date()) 
   const [selectedDateStr, setSelectedDateStr] = useState<string>(formatDateStr(new Date()))
-  const [now, setNow] = useState(new Date()) 
-
-  // 1. 데이터 불러오기 (시험 목록 + 내 제출 기록)
+  
+  // 1. 데이터 불러오기
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true)
-        
-        // 1. 사용자 정보 가져오기
-        const userRes = await fetch("/api/auth/me")
-        if (!userRes.ok) return 
-        const user = await userRes.json()
-        const userId = user.id || user._id
+    fetchExams()
+  }, [])
 
-        // 2. 시험 목록 가져오기
-        const res = await fetch("/api/tests")
-        if (res.ok) {
-          const data = await res.json()
-          setExams(data)
-
-          // 3. 각 시험별 제출 여부 확인 (병렬 처리)
-          const submissionMap: Record<string, any> = {}
-          await Promise.all(data.map(async (exam: any) => {
-             try {
-                 const checkRes = await fetch(`/api/tests/${exam._id}/check?userId=${userId}`)
-                 const checkData = await checkRes.json()
-                 if (checkData.taken) {
-                     submissionMap[exam._id] = checkData // { taken: true, score: 80, ... }
-                 }
-             } catch (e) { console.error(e) }
-          }))
-          setSubmissions(submissionMap)
-        }
-      } catch (error) {
-        console.error(error)
-      } finally {
-        setIsLoading(false)
+  const fetchExams = async () => {
+    try {
+      setIsLoading(true)
+      const res = await fetch("/api/tests")
+      if (res.ok) {
+        const data = await res.json()
+        setExams(data)
       }
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setIsLoading(false)
     }
-    fetchData()
-  }, [])
+  }
 
-  // 2. 1초마다 현재 시간 갱신
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(timer)
-  }, [])
+  const handleDelete = async (id: string) => {
+    if (!confirm("정말 삭제하시겠습니까? 학생들의 응시 기록도 함께 삭제됩니다.")) return;
+    try {
+      const res = await fetch(`/api/tests/${id}`, { method: "DELETE" })
+      if (res.ok) fetchExams()
+      else alert("삭제 실패")
+    } catch (e) {
+      alert("오류 발생")
+    }
+  }
 
   // 캘린더 날짜 계산
   const year = currentDate.getFullYear()
@@ -111,7 +107,10 @@ export default function StudentExamCalendarPage() {
         for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
           const dStr = formatDateStr(d);
           const occupied = dateOccupancy.get(dStr) || [];
-          if (occupied[rowIndex]) { isAvailable = false; break; }
+          if (occupied[rowIndex]) {
+            isAvailable = false;
+            break;
+          }
         }
         if (isAvailable) break; 
         rowIndex++; 
@@ -125,10 +124,11 @@ export default function StudentExamCalendarPage() {
         dateOccupancy.set(dStr, occupied);
       }
     });
+
     return layout;
   }, [exams]);
 
-  const isExamOnDate = (exam: any, targetDateStr: string) => {
+  const isExamOnDate = (exam: Exam, targetDateStr: string) => {
     if (!exam.startDate || !exam.endDate) return false
     const target = new Date(targetDateStr).setHours(0,0,0,0)
     const start = new Date(exam.startDate).setHours(0,0,0,0)
@@ -138,20 +138,13 @@ export default function StudentExamCalendarPage() {
 
   const selectedExams = exams.filter(e => isExamOnDate(e, selectedDateStr))
 
-  // ✅ 상태 결정 로직 (제출 여부 포함)
-  const getExamStatus = (exam: any) => {
-    const submission = submissions[exam._id]
-    if (submission) return "TAKEN" // 이미 응시함
-
-    const start = new Date(exam.startDate).getTime()
-    const end = new Date(exam.endDate).getTime()
-    const current = now.getTime()
-    const waitStart = start - (30 * 60 * 1000) // 30분 전
-
-    if (current >= end) return "ENDED"
-    if (current >= start) return "RUNNING"
-    if (current >= waitStart) return "WAITING"
-    return "UPCOMING"
+  // ✅ [수정] 다이얼로그 없이 바로 이동 (선택된 날짜 기본값으로 전달)
+  const handleGoToCreate = () => {
+    const query = new URLSearchParams({
+        start: `${selectedDateStr}T09:00`,
+        end: `${selectedDateStr}T10:00`
+    }).toString()
+    router.push(`/dashboard/admin/test/create?${query}`)
   }
 
   return (
@@ -162,20 +155,20 @@ export default function StudentExamCalendarPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <CalendarIcon className="w-6 h-6 md:w-8 md:h-8 text-violet-600" />
-            나의 시험 일정
+            시험 일정 관리
           </h1>
           <p className="text-sm md:text-base text-slate-500 mt-1">
-            시험 날짜를 선택하여 입장하세요.
+            등록된 시험: 총 {exams.length}개
           </p>
         </div>
-        <div className="text-sm font-mono bg-white dark:bg-slate-900 px-4 py-2 rounded-full border border-slate-200 dark:border-slate-800 shadow-sm text-slate-600 dark:text-slate-300">
-            현재 시간: {now.toLocaleTimeString()}
-        </div>
+        <Button size="lg" className="bg-violet-600 hover:bg-violet-700 text-white shadow-lg" onClick={handleGoToCreate}>
+            <Plus className="w-5 h-5 mr-2" /> 새 시험 만들기
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6 h-auto lg:h-[700px]">
         
-        {/* 1. 달력 (왼쪽) - 디자인 유지 */}
+        {/* === 왼쪽: 달력 === */}
         <div className="lg:col-span-7 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
           <div className="flex items-center justify-between p-4 md:p-6 border-b border-slate-100 dark:border-slate-800">
             <div className="flex items-baseline gap-2">
@@ -217,7 +210,7 @@ export default function StudentExamCalendarPage() {
                   )}
                 >
                   <span className={cn(
-                    "text-[10px] md:text-xs w-6 h-6 flex items-center justify-center rounded-full font-bold mb-0.5 md:mb-1 mx-auto md:mx-0",
+                    "text-[10px] md:text-xs w-6 h-6 flex items-center justify-center rounded-full font-medium mb-0.5 md:mb-1 mx-auto md:mx-0",
                     isToday ? "bg-violet-600 text-white" : "text-slate-500 dark:text-slate-400", 
                     isSelected && !isToday && "text-violet-700 bg-white shadow-sm ring-1 ring-violet-200"
                   )}>
@@ -231,13 +224,10 @@ export default function StudentExamCalendarPage() {
                         
                         const isStart = exam.startDate === dateKey;
                         const isEnd = exam.endDate === dateKey;
-                        // 응시 여부에 따라 색상 다르게 표시 (선택사항 - 일단 보라색 유지)
-                        const isTaken = submissions[exam._id]; 
 
                         return (
                             <div key={exam._id} className={cn(
-                                "h-1 md:h-1.5 rounded-sm transition-all shadow-sm",
-                                isTaken ? "bg-green-500" : "bg-violet-400 dark:bg-violet-600", // 응시했으면 초록, 아니면 보라
+                                "h-1 md:h-1.5 rounded-sm bg-violet-400 dark:bg-violet-600 transition-all shadow-sm",
                                 isStart && !isEnd && "rounded-r-none mr-[-2px] md:mr-[-8px] ml-0.5 md:ml-1",
                                 isEnd && !isStart && "rounded-l-none ml-[-2px] md:ml-[-8px] mr-0.5 md:mr-1",
                                 !isStart && !isEnd && "rounded-none mx-[-2px] md:mx-[-8px]"
@@ -251,13 +241,15 @@ export default function StudentExamCalendarPage() {
           </div>
         </div>
 
-        {/* 2. 우측 상세 리스트 (오른쪽) */}
+        {/* === 우측: 상세 리스트 === */}
         <div className="lg:col-span-5 flex flex-col h-[500px] lg:h-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <div className="p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900">
-                <h3 className="font-bold text-base md:text-lg text-slate-900 dark:text-white">
-                    {selectedDateStr}
-                </h3>
-                <p className="text-[10px] md:text-xs text-slate-500">선택된 날짜의 시험 목록</p>
+            <div className="p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900 flex justify-between items-center">
+                <div>
+                    <h3 className="font-bold text-base md:text-lg text-slate-900 dark:text-white">
+                        {selectedDateStr}
+                    </h3>
+                    <p className="text-[10px] md:text-xs text-slate-500">선택된 날짜의 시험 목록</p>
+                </div>
             </div>
 
             <ScrollArea className="flex-1 p-4 md:p-6">
@@ -268,94 +260,65 @@ export default function StudentExamCalendarPage() {
                 ) : selectedExams.length > 0 ? (
                     <div className="space-y-4">
                         {selectedExams.map((exam) => {
-                            const status = getExamStatus(exam)
-                            const submission = submissions[exam._id] // 내 제출 기록
-
-                            let btnText = "입장 불가"
-                            let btnDisabled = true
-                            let btnStyle = "bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500"
-                            let statusBadge = <Badge variant="outline">예정됨</Badge>
-
-                            // ✅ 상태별 버튼 스타일 및 텍스트 (로직 수정됨)
-                            if (status === "TAKEN") {
-                                btnText = `내 점수: ${submission.score}점`
-                                btnDisabled = true // 점수 확인 후 다시 응시 불가
-                                btnStyle = "bg-white text-green-600 border border-green-200 hover:bg-green-50"
-                                statusBadge = <Badge className="bg-green-100 text-green-600 border-green-200">응시 완료</Badge>
-                            } else if (status === "WAITING") {
-                                btnText = "대기실 입장"
-                                btnDisabled = false
-                                btnStyle = "bg-orange-500 hover:bg-orange-600 text-white animate-pulse"
-                                statusBadge = <Badge className="bg-orange-100 text-orange-600 border-orange-200">입장 대기중</Badge>
-                            } else if (status === "RUNNING") {
-                                btnText = "시험 응시하기"
-                                btnDisabled = false
-                                btnStyle = "bg-violet-600 hover:bg-violet-700 text-white shadow-lg"
-                                statusBadge = <Badge className="bg-violet-100 text-violet-600 border-violet-200">시험 진행중</Badge>
-                            } else if (status === "ENDED") {
-                                btnText = "기간 종료 (미응시)"
-                                btnDisabled = true
-                                btnStyle = "bg-slate-100 text-slate-400"
-                                statusBadge = <Badge variant="secondary" className="bg-slate-100 text-slate-500">종료됨</Badge>
-                            } else {
-                                // UPCOMING
-                                btnText = `${formatTime(exam.startDate)} 입장 가능`
-                            }
+                            const totalScore = exam.questions 
+                                ? exam.questions.reduce((acc: number, q: any) => acc + (q.score || 0), 0) 
+                                : 0;
+                            const isEnded = new Date() > new Date(exam.endDate);
 
                             return (
-                                <div key={exam._id} className={cn(
-                                    "group bg-white dark:bg-slate-800 border rounded-xl p-5 transition-all shadow-sm",
-                                    status === "TAKEN" ? "border-green-100 dark:border-green-900/30" : "border-slate-200 dark:border-slate-700 hover:border-violet-300"
-                                )}>
+                                <div key={exam._id} className="group bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:border-violet-300 transition-all shadow-sm">
                                     <div className="flex justify-between items-start mb-3">
-                                        {statusBadge}
-                                        {status === "RUNNING" && (
-                                            <span className="flex h-2.5 w-2.5">
-                                                <span className="animate-ping absolute inline-flex h-2.5 w-2.5 rounded-full bg-violet-400 opacity-75"></span>
-                                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500"></span>
-                                            </span>
-                                        )}
+                                        <Badge variant="outline" className={cn(
+                                            "text-[10px] md:text-xs px-2 py-0.5",
+                                            isEnded ? "bg-slate-100 text-slate-500 border-slate-200" : "bg-green-100 text-green-700 border-green-200"
+                                        )}>
+                                          {isEnded ? '종료됨' : '예정/진행중'}
+                                        </Badge>
+                                        <Button 
+                                            size="sm" 
+                                            variant="ghost" 
+                                            className="h-6 px-2 text-xs text-violet-600 hover:bg-violet-50 hover:text-violet-700"
+                                            onClick={() => router.push(`/dashboard/admin/test/result/${exam._id}`)}
+                                        >
+                                            <BarChart3 className="w-3 h-3 mr-1" /> 결과/랭킹
+                                        </Button>
                                     </div>
                                     
                                     <h4 className="font-bold text-slate-900 dark:text-white mb-2 text-xl tracking-tight">{exam.title}</h4>
                                     
                                     <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg space-y-2 mb-4 border border-slate-100 dark:border-slate-700">
-                                        <div className="flex items-center gap-2 text-sm font-bold text-slate-700 dark:text-slate-200">
-                                            <Clock className="w-4 h-4 text-violet-600" />
-                                            <span>
-                                                {formatTime(exam.startDate)} ~ {formatTime(exam.endDate)}
+                                        <div className="flex items-start gap-2.5">
+                                            <Clock className="w-4 h-4 text-violet-600 mt-0.5 shrink-0" />
+                                            <span className="text-sm font-black text-slate-900 dark:text-white leading-tight">
+                                                {formatDateTime(exam.startDate)} <span className="text-slate-400 mx-1">~</span> {formatDateTime(exam.endDate)}
                                             </span>
                                         </div>
-                                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 pl-6">
-                                            <Timer className="w-3 h-3" />
-                                            <span>제한시간 {exam.timeLimit}분</span>
+                                        <div className="flex items-center gap-2 text-xs font-medium text-slate-500 pl-[26px]">
+                                            <FileText className="w-3 h-3" />
+                                            <span>총 {exam.questions ? exam.questions.length : 0}문항</span>
+                                            <span className="text-slate-300">|</span>
+                                            <span className="text-violet-600 font-bold">총 {totalScore}점</span>
                                         </div>
                                     </div>
-
-                                    {status === 'RUNNING' && (
-                                        <div className="text-xs text-red-500 flex items-center gap-1.5 mb-3 font-medium bg-red-50 dark:bg-red-900/20 p-2 rounded">
-                                            <AlertCircle className="w-3 h-3" />
-                                            <span>지금 입장 시 남은 시간만 인정됩니다.</span>
-                                        </div>
-                                    )}
                                     
-                                    <Button 
-                                        className={cn("w-full h-10 font-bold transition-all", btnStyle)}
-                                        disabled={btnDisabled}
-                                        onClick={() => router.push(`/dashboard/test/${exam._id}`)}
-                                    >
-                                        {status === 'WAITING' || status === 'RUNNING' ? (
-                                            <>
-                                                {btnText} <Play className="w-3 h-3 ml-2 fill-current" />
-                                            </>
-                                        ) : status === 'TAKEN' ? (
-                                            <><CheckCircle2 className="w-4 h-4 mr-2" /> {btnText}</>
-                                        ) : status === 'ENDED' ? (
-                                            <><XCircle className="w-4 h-4 mr-2" /> {btnText}</>
-                                        ) : (
-                                            <><Lock className="w-3 h-3 mr-2" /> {btnText}</>
-                                        )}
-                                    </Button>
+                                    <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                                        <Button 
+                                        size="sm" 
+                                        variant="outline" 
+                                        className="flex-1 h-9 text-xs border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                        onClick={() => router.push(`/dashboard/admin/test/create?id=${exam._id}`)}
+                                        >
+                                            <PenLine className="w-3 h-3 mr-1"/> 수정
+                                        </Button>
+                                        <Button 
+                                        size="sm" 
+                                        variant="outline" 
+                                        className="flex-1 h-9 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-900/10 dark:border-red-900/30"
+                                        onClick={() => handleDelete(exam._id)}
+                                        >
+                                            <Trash2 className="w-3 h-3 mr-1"/> 삭제
+                                        </Button>
+                                    </div>
                                 </div>
                             )
                         })}
@@ -367,7 +330,7 @@ export default function StudentExamCalendarPage() {
                         </div>
                         <div>
                             <p className="font-medium text-slate-900 dark:text-white text-sm md:text-base">일정이 없습니다</p>
-                            <p className="text-[10px] md:text-xs mt-1">다른 날짜를 선택해보세요.</p>
+                            <p className="text-[10px] md:text-xs mt-1">새로운 시험을 만들어보세요.</p>
                         </div>
                     </div>
                 )}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-// ✅ [수정] Vercel Blob 클라이언트 업로드 함수 추가
+// ✅ Vercel Blob 클라이언트 업로드
 import { upload } from "@vercel/blob/client" 
 
 import { Input } from "@/components/ui/input"
@@ -20,16 +20,34 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { 
   Search, FileText, Video, Bell, Trash2, Youtube, Download, 
-  Pencil, Loader2, BookOpen, Paperclip, X
+  Pencil, Loader2, BookOpen, Paperclip, X, ChevronLeft, ChevronRight
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
+
+// 페이지당 아이템 수 설정
+const ITEMS_PER_PAGE = 10
+
+// ✅ [추가] 카테고리 한글 변환 맵
+const categoryMap: Record<string, string> = {
+  grammar: "문법",
+  reading: "독해",
+  listening: "듣기",
+  vocabulary: "어휘",
+  beginner: "초급",
+  intermediate: "중급",
+  advanced: "고급"
+}
 
 export default function AdminContentsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [activeTypeTab, setActiveTypeTab] = useState("all") 
   const [contents, setContents] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  
+  // 현재 페이지 상태
+  const [currentPage, setCurrentPage] = useState(1)
+
   const { toast } = useToast()
 
   const [modalOpen, setModalOpen] = useState({
@@ -54,34 +72,31 @@ export default function AdminContentsPage() {
   // 4. 커리큘럼 폼
   const [courseForm, setCourseForm] = useState({ title: "", description: "", category: "grammar", customCategory: "", level: "초급", intro: "", curriculum: "" })
 
+  // 데이터 로딩 최적화 (선택된 탭만 로딩)
   const fetchAllData = async () => {
     setIsLoading(true)
     try {
-      const [videoRes, resRes, noticeRes, courseRes] = await Promise.all([
-        fetch("/api/contents", { cache: 'no-store' }), 
-        fetch("/api/resources", { cache: 'no-store' }), 
-        fetch("/api/notices", { cache: 'no-store' }), 
-        fetch("/api/courses", { cache: 'no-store' })
-      ])
+      // TS 오류 방지를 위해 타입 명시 (: any[])
+      let videos: any[] = [], resources: any[] = [], notices: any[] = [], courses: any[] = []
 
-      const videos = videoRes.ok ? await videoRes.json() : []
-      const resources = resRes.ok ? await resRes.json() : []
-      const notices = noticeRes.ok ? await noticeRes.json() : []
-      const courses = courseRes.ok ? await courseRes.json() : []
+      // 탭에 따라 필요한 API만 병렬 호출
+      const promises = []
+      
+      if (activeTypeTab === "all" || activeTypeTab === "video") promises.push(fetch("/api/contents", { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(d => videos = d))
+      if (activeTypeTab === "all" || activeTypeTab === "resource") promises.push(fetch("/api/resources", { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(d => resources = d))
+      if (activeTypeTab === "all" || activeTypeTab === "notice") promises.push(fetch("/api/notices", { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(d => notices = d))
+      if (activeTypeTab === "all" || activeTypeTab === "course") promises.push(fetch("/api/courses", { cache: 'no-store' }).then(r => r.ok ? r.json() : []).then(d => courses = d))
+
+      await Promise.all(promises)
 
       const allData = [
         ...videos.map((v:any) => ({ ...v, id: v._id, type: "video", date: v.createdAt?.split("T")[0] || "", detail: v.duration })),
         ...resources.map((r:any) => ({ ...r, id: r._id, type: "resource", date: r.createdAt?.split("T")[0] || "", detail: `${r.files?.length || 0}개 파일` })),
-        
         ...notices.map((n:any) => ({ 
-            ...n, 
-            id: n._id, 
-            type: "notice", 
-            date: n.createdAt?.split("T")[0] || "", 
+            ...n, id: n._id, type: "notice", date: n.createdAt?.split("T")[0] || "", 
             detail: n.target === 'all' ? '전체' : n.target === 'student' ? '학생' : '외부',
             category: n.isImportant ? "중요" : "일반"
         })),
-        
         ...courses.map((c:any) => ({ ...c, id: c._id, type: "course", date: c.createdAt?.split("T")[0] || "", detail: c.level }))
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
@@ -94,7 +109,22 @@ export default function AdminContentsPage() {
     }
   }
 
-  useEffect(() => { fetchAllData() }, [])
+  // 탭이 바뀔 때마다 데이터 새로고침 및 페이지 초기화
+  useEffect(() => { 
+    fetchAllData()
+    setCurrentPage(1)
+  }, [activeTypeTab])
+
+  // 검색 시 페이지 초기화
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm])
+
+  // 페이지네이션 계산 로직
+  const filteredContents = contents.filter(item => item.title.toLowerCase().includes(searchTerm.toLowerCase()))
+  const totalPages = Math.ceil(filteredContents.length / ITEMS_PER_PAGE)
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const paginatedContents = filteredContents.slice(startIndex, startIndex + ITEMS_PER_PAGE)
 
   const closeModal = () => {
     setModalOpen({ video: false, resource: false, notice: false, course: false })
@@ -165,7 +195,6 @@ export default function AdminContentsPage() {
     setExistingFiles(prev => prev.filter((_, idx) => idx !== indexToRemove))
   }
 
-
   const saveResource = async () => {
     const finalCategory = resForm.category === "direct" ? resForm.customCategory : resForm.category
     
@@ -181,14 +210,11 @@ export default function AdminContentsPage() {
         for (let i = 0; i < resFiles.length; i++) {
           const file = resFiles[i]
           
-          // 1. 서버에 요청해서 (1)이 붙은 깔끔한 파일명을 받아옵니다.
           const checkRes = await fetch(`/api/upload?filename=${encodeURIComponent(file.name)}`);
           if (!checkRes.ok) throw new Error("파일명 확인 실패");
           
-          const { uniqueName } = await checkRes.json(); // 예: "자료 (1).pdf"
+          const { uniqueName } = await checkRes.json();
 
-          // 2. 받아온 이름으로 업로드합니다.
-          // ❌ addRandomSuffix 옵션은 여기서 절대 쓰지 마세요 (에러 원인)
           const newBlob = await upload(uniqueName, file, {
             access: 'public',
             handleUploadUrl: '/api/upload', 
@@ -289,40 +315,84 @@ export default function AdminContentsPage() {
         ))}
       </div>
 
-      <div className="bg-white dark:bg-slate-900 border rounded-xl overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>유형</TableHead>
-              <TableHead>제목</TableHead>
-              <TableHead>카테고리/중요</TableHead>
-              <TableHead>상세</TableHead>
-              <TableHead>날짜</TableHead>
-              <TableHead className="text-right">관리</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {contents.filter(item => (activeTypeTab === "all" || item.type === activeTypeTab) && item.title.includes(searchTerm)).map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="capitalize font-medium text-xs text-slate-500">{item.type}</TableCell>
-                <TableCell className="font-bold">{item.title}</TableCell>
-                <TableCell>
-                  {item.type === 'notice' ? (
-                    item.category === '중요' ? <Badge className="bg-red-500 hover:bg-red-600 border-0">중요(필독)</Badge> : <Badge variant="secondary">일반</Badge>
-                  ) : (
-                    <Badge variant="outline">{item.category}</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-xs text-slate-500">{item.detail}</TableCell>
-                <TableCell className="text-xs">{item.date}</TableCell>
-                <TableCell className="text-right">
-                  <Button size="sm" variant="ghost" onClick={() => handleEditClick(item)}><Pencil className="w-4 h-4 text-blue-500" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDelete(item.id, item.type)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <div className="bg-white dark:bg-slate-900 border rounded-xl overflow-hidden min-h-[400px] flex flex-col justify-between">
+        {isLoading ? (
+            <div className="flex justify-center items-center h-full py-20">
+                <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
+            </div>
+        ) : (
+            <>
+                <Table>
+                <TableHeader>
+                    <TableRow>
+                    <TableHead>유형</TableHead>
+                    <TableHead>제목</TableHead>
+                    <TableHead>카테고리/중요</TableHead>
+                    <TableHead>상세</TableHead>
+                    <TableHead>날짜</TableHead>
+                    <TableHead className="text-right">관리</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {paginatedContents.length > 0 ? (
+                        paginatedContents.map((item) => (
+                        <TableRow key={item.id}>
+                            <TableCell className="capitalize font-medium text-xs text-slate-500">{item.type}</TableCell>
+                            <TableCell className="font-bold">{item.title}</TableCell>
+                            <TableCell>
+                            {item.type === 'notice' ? (
+                                item.category === '중요' ? <Badge className="bg-red-500 hover:bg-red-600 border-0">중요(필독)</Badge> : <Badge variant="secondary">일반</Badge>
+                            ) : (
+                                // ✅ [수정] categoryMap을 사용하여 한글로 표시, 없으면 원래 값 표시
+                                <Badge variant="outline">{categoryMap[item.category] || item.category}</Badge>
+                            )}
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-500">{item.detail}</TableCell>
+                            <TableCell className="text-xs">{item.date}</TableCell>
+                            <TableCell className="text-right">
+                            <Button size="sm" variant="ghost" onClick={() => handleEditClick(item)}><Pencil className="w-4 h-4 text-blue-500" /></Button>
+                            <Button size="sm" variant="ghost" onClick={() => handleDelete(item.id, item.type)}><Trash2 className="w-4 h-4 text-red-500" /></Button>
+                            </TableCell>
+                        </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={6} className="text-center py-10 text-slate-500">데이터가 없습니다.</TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+                </Table>
+
+                {/* 페이지네이션 UI */}
+                {totalPages > 1 && (
+                    <div className="flex justify-center items-center gap-4 py-4 border-t border-slate-100 dark:border-slate-800">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="h-8 px-3"
+                        >
+                            <ChevronLeft className="w-4 h-4 mr-1" /> 이전
+                        </Button>
+                        
+                        <div className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            <span className="text-slate-900 dark:text-white font-bold">{currentPage}</span> / {totalPages}
+                        </div>
+
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className="h-8 px-3"
+                        >
+                            다음 <ChevronRight className="w-4 h-4 ml-1" />
+                        </Button>
+                    </div>
+                )}
+            </>
+        )}
       </div>
 
       {/* 1. 영상 모달 */}

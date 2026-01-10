@@ -4,13 +4,50 @@ import User from "@/models/User";
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     await db();
-    const users = await User.find().select("-password").sort({ createdAt: -1 });
-    return NextResponse.json(users);
+
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "20");
+    const search = searchParams.get("search") || "";
+    const status = searchParams.get("status") || "all";
+
+    const query: any = {};
+
+    if (status !== "all") {
+      query.status = status;
+    }
+
+    if (search) {
+      query.$or = [ 
+        { email: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const skip = (page - 1) * limit;
+
+    const users = await User.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)  
+      .limit(limit);  
+
+    const totalCount = await User.countDocuments(query);
+
+    return NextResponse.json({
+      users,
+      pagination: {
+        total: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+        page,
+        limit
+      }
+    });
+
   } catch (error) {
-    return NextResponse.json({ message: "로딩 실패" }, { status: 500 });
+    console.error("User Fetch Error:", error);
+    return NextResponse.json({ message: "서버 오류" }, { status: 500 });
   }
 }
 

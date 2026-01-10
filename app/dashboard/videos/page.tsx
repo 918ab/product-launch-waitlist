@@ -28,7 +28,9 @@ import {
   ArrowRight,
   RotateCcw,
   Youtube,
-  Loader2 
+  Loader2,
+  ChevronLeft, // [추가]
+  ChevronRight // [추가]
 } from "lucide-react"
 
 // 유튜브 ID 추출 함수
@@ -52,6 +54,9 @@ interface Video {
   youtubeUrl: string
 }
 
+// [추가] 한 페이지에 보여줄 영상 개수 (3열 그리드에 맞춰 12개 추천)
+const ITEMS_PER_PAGE = 12
+
 export default function VideosPage() {
   const [videos, setVideos] = useState<Video[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -60,7 +65,7 @@ export default function VideosPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
   
-  // [추가] 동적 카테고리 목록
+  // 동적 카테고리 목록
   const [uniqueCategories, setUniqueCategories] = useState<string[]>([])
 
   // 기간 설정 상태
@@ -69,6 +74,9 @@ export default function VideosPage() {
   const [endDate, setEndDate] = useState("")   
   const [tempStart, setTempStart] = useState("")
   const [tempEnd, setTempEnd] = useState("")
+
+  // [추가] 페이지네이션 상태
+  const [currentPage, setCurrentPage] = useState(1)
 
   // 데이터 불러오기
   useEffect(() => {
@@ -90,9 +98,16 @@ export default function VideosPage() {
             isPinned: item.isPinned || false,
             youtubeUrl: item.videoUrl || ""
           }))
+          // 핀 고정 및 최신순 정렬을 미리 수행
+          formattedData.sort((a: Video, b: Video) => {
+            if (a.isPinned && !b.isPinned) return -1
+            if (!a.isPinned && b.isPinned) return 1
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          })
+          
           setVideos(formattedData)
 
-          // [핵심] 카테고리 목록 추출 (중복 제거)
+          // 카테고리 목록 추출
           const categories = Array.from(new Set(formattedData.map((v: any) => v.category))) as string[]
           setUniqueCategories(categories)
         }
@@ -104,6 +119,11 @@ export default function VideosPage() {
     }
     fetchVideos()
   }, [])
+
+  // [추가] 필터 조건이 바뀌면 1페이지로 리셋
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, categoryFilter, dateFilter, startDate, endDate])
 
   // 기간 검색 핸들러
   const handleCustomSearch = () => {
@@ -131,7 +151,7 @@ export default function VideosPage() {
       if (startDate && endDate) {
         const start = new Date(startDate)
         const end = new Date(endDate)
-        end.setHours(23, 59, 59) // 종료일의 마지막 시간까지 포함
+        end.setHours(23, 59, 59)
         matchesDate = itemDate >= start && itemDate <= end
       } else if (startDate) {
         const start = new Date(startDate)
@@ -154,12 +174,11 @@ export default function VideosPage() {
     return matchesSearch && matchesCategory && matchesDate
   })
 
-  // 정렬 (중요 핀 고정 우선 -> 최신순)
-  const sortedVideos = [...filteredVideos].sort((a, b) => {
-    if (a.isPinned && !b.isPinned) return -1
-    if (!a.isPinned && b.isPinned) return 1
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  })
+  // [추가] 페이지네이션 데이터 슬라이싱 (Client-Side Pagination)
+  // 이미 정렬된 videos를 필터링했으므로 재정렬 불필요
+  const totalPages = Math.ceil(filteredVideos.length / ITEMS_PER_PAGE)
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const paginatedVideos = filteredVideos.slice(startIndex, startIndex + ITEMS_PER_PAGE)
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -167,10 +186,14 @@ export default function VideosPage() {
       <div className="flex flex-col gap-2">
         <h1 className="text-3xl font-bold text-slate-900 dark:text-white">복습 영상</h1>
         <p className="text-slate-500 dark:text-slate-400">
-          놓친 강의를 다시 보거나, 부족한 부분을 복습하세요.
+          놓친 강의를 다시 보거나, 부족한 부분을 복습하세요. 
+          <span className="ml-2 text-xs font-bold text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+            총 {filteredVideos.length}개
+          </span>
         </p>
       </div>
 
+      {/* 필터링 영역 */}
       <div className="flex flex-col gap-4">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="relative flex-1">
@@ -184,7 +207,6 @@ export default function VideosPage() {
           </div>
           <div className="flex flex-col sm:flex-row gap-4">
             
-            {/* 기간 설정 Select */}
             <div className="w-full sm:w-[160px]">
               <Select value={dateFilter} onValueChange={setDateFilter}>
                 <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
@@ -204,7 +226,6 @@ export default function VideosPage() {
               </Select>
             </div>
 
-            {/* [수정] 동적 카테고리 Select */}
             <div className="w-full sm:w-[160px]">
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
@@ -224,7 +245,6 @@ export default function VideosPage() {
           </div>
         </div>
 
-        {/* 기간 직접 입력 UI */}
         {dateFilter === "custom" && (
           <div className="flex flex-col sm:flex-row items-center gap-2 p-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-lg animate-in slide-in-from-top-2 duration-300">
             <span className="text-sm font-medium text-slate-600 dark:text-slate-300 shrink-0">기간 상세 설정:</span>
@@ -241,13 +261,14 @@ export default function VideosPage() {
         )}
       </div>
 
+      {/* 비디오 리스트 그리드 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? (
           <div className="col-span-full flex justify-center py-20">
             <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
           </div>
-        ) : sortedVideos.length > 0 ? (
-          sortedVideos.map((video) => {
+        ) : paginatedVideos.length > 0 ? (
+          paginatedVideos.map((video) => {
             const videoId = getYouTubeId(video.youtubeUrl)
             const thumbnailUrl = videoId ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg` : null
 
@@ -343,6 +364,35 @@ export default function VideosPage() {
           </div>
         )}
       </div>
+
+      {/* [추가] 페이지네이션 UI */}
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-4 pt-4 pb-8">
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="h-9 px-4"
+            >
+                <ChevronLeft className="w-4 h-4 mr-1" /> 이전
+            </Button>
+            
+            <div className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                <span className="text-slate-900 dark:text-white font-bold">{currentPage}</span> / {totalPages}
+            </div>
+
+            <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="h-9 px-4"
+            >
+                다음 <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,373 +1,618 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, use } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
+import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
-  Clock, Bookmark, LayoutGrid, X
+  Clock, CheckCircle2, Trophy, ListChecks, Lock, FileImage, Timer, Maximize2, X, AlertCircle, Home, BookOpen, Calculator
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Lora, Inter } from "next/font/google"
+import {
+  Card
+} from "@/components/ui/card"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
+} from "@/components/ui/dialog"
 
-// 영어 지문용 (가독성 명조체)
-const lora = Lora({ 
-  subsets: ["latin"], 
-  weight: ['400', '500', '600', '700'],
-  display: 'swap',
-})
+export default function ExamPage({ params }: { params: Promise<{ id: string }> }) {
+  const router = useRouter()
+  const { id } = use(params)
 
-// UI용 (깔끔한 고딕체)
-const inter = Inter({ 
-  subsets: ["latin"],
-  display: 'swap',
-})
+  const [status, setStatus] = useState<string>('loading')
+  const [testData, setTestData] = useState<any>(null)
+  
+  const [now, setNow] = useState(new Date()) 
+  const [timeLeft, setTimeLeft] = useState(0) 
+  const [timeUntilStart, setTimeUntilStart] = useState(0) 
 
-const EXAM_DATA = {
-  id: "exam-101",
-  title: "2026학년도 1학기 영어 중간고사",
-  timeLimitMinutes: 60,
-  questions: [
-    {
-      id: 1,
-      type: "CHOICE",
-      score: 3.5,
-      text: "다음 빈칸에 들어갈 말로 가장 적절한 것은?",
-      content: "Success represents the 1% of your work which results from the 99% that is called ______.",
-      options: ["failure", "pleasure", "talent", "fortune", "effort"]
-    },
-    {
-      id: 2,
-      type: "CHOICE",
-      score: 4.0,
-      text: "밑줄 친 'It'이 가리키는 것으로 가장 적절한 것은?",
-      content: "It is a long, narrow mark or band that differs in color or texture from the surface on either side of it.",
-      options: ["Dot", "Stripe", "Shape", "Square", "Circle"]
-    },
-    {
-      id: 3,
-      type: "TEXT",
-      score: 10.0,
-      text: "다음 글의 주제를 한 문장으로 요약하시오.",
-      content: "Many people believe that anger is a negative emotion...",
-    },
-    {
-      id: 4,
-      type: "CHOICE",
-      score: 3.5,
-      text: "다음 중 어법상 틀린 것은?",
-      options: [
-        "She suggested that we go to the park.",
-        "I look forward to seeing you.",
-        "He stopped to smoke.",
-        "Would you mind opening the window?",
-        "I remember to lock the door yesterday."
-      ]
-    },
-    ...Array.from({ length: 5 }).map((_, i) => ({
-      id: 5 + i,
-      type: "CHOICE",
-      score: 4.0,
-      text: `[독해] 다음 글을 읽고 물음에 답하시오. (${i+1})`,
-      content: "Lorem ipsum dolor sit amet, consectetur adipiscing elit...",
-      options: ["Option A", "Option B", "Option C", "Option D", "Option E"]
-    }))
-  ]
-}
-
-export default function ExamPage() {
-  const [timeLeft, setTimeLeft] = useState(EXAM_DATA.timeLimitMinutes * 60)
   const [answers, setAnswers] = useState<Record<number, string>>({})
-  const [markedQuestions, setMarkedQuestions] = useState<number[]>([])
-  const questionRefs = useRef<Record<number, HTMLDivElement | null>>({})
-  const [isMobileOMROpen, setIsMobileOMROpen] = useState(false)
+  const answersRef = useRef<Record<number, string>>({}) 
 
+  // 결과 통계
+  const [resultStats, setResultStats] = useState({ earned: 0, total: 0, correctCount: 0, wrongCount: 0 })
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  
+  // 모달 제어
+  const [showResultModal, setShowResultModal] = useState(false)
+  const [isTimeOver, setIsTimeOver] = useState(false)
+  
+  const [activeTab, setActiveTab] = useState("paper")
+  const [expandedImage, setExpandedImage] = useState<string | null>(null)
+
+  // 시계
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => (prev <= 0 ? 0 : prev - 1))
-    }, 1000)
+    const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
 
+  // 초기화
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const userRes = await fetch("/api/auth/me")
+        if (!userRes.ok) return router.push("/login")
+        const user = await userRes.json()
+        setCurrentUser({ ...user, id: user.id || user._id })
+
+        const checkRes = await fetch(`/api/tests/${id}/check?userId=${user.id || user._id}`, { cache: 'no-store' })
+        const checkData = await checkRes.json()
+        if (checkData.taken) {
+          alert(`이미 응시한 시험입니다.\n점수: ${checkData.score}점`)
+          return router.replace("/dashboard/test")
+        }
+
+        const testRes = await fetch(`/api/tests/${id}`)
+        if (!testRes.ok) throw new Error("시험 로드 실패")
+        const data = await testRes.json()
+        setTestData(data)
+
+        const nowTime = new Date().getTime()
+        const start = new Date(data.startDate).getTime()
+        const end = new Date(data.endDate).getTime()
+
+        if (nowTime >= end) {
+          setStatus('ended')
+        } else if (nowTime < start) {
+          setTimeUntilStart(Math.floor((start - nowTime) / 1000))
+          setStatus('waiting')
+        } else {
+          calculateRemainingTime(data)
+          setStatus('intro')
+        }
+      } catch (err) {
+        console.error(err)
+        router.back()
+      }
+    }
+    init()
+  }, [id, router])
+
+  // 타이머 로직
+  useEffect(() => {
+    if (status !== 'waiting') return
+    const timer = setInterval(() => {
+      setTimeUntilStart((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          calculateRemainingTime(testData) 
+          setStatus('intro')
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [status, testData])
+
+  useEffect(() => {
+    if (status !== 'taking') return
+    const timer = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          setIsTimeOver(true)
+          handleSubmit(true)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [status])
+
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setExpandedImage(null)
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
+  }, [])
+
+  const calculateRemainingTime = (data: any) => {
+    const nowTime = new Date().getTime()
+    const end = new Date(data.endDate).getTime()
+    const limitSeconds = data.timeLimit * 60
+    const physicalSecondsLeft = Math.floor((end - nowTime) / 1000)
+    setTimeLeft(Math.min(limitSeconds, physicalSecondsLeft))
+  }
+
   const formatTime = (seconds: number) => {
-    const m = Math.floor(seconds / 60)
+    if (seconds < 0) return "00:00"
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
     const s = seconds % 60
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
   const handleAnswer = (qId: number, val: string) => {
-    setAnswers(prev => ({ ...prev, [qId]: val }))
+    if (status === 'submitted') return;
+    setAnswers(prev => {
+        const newAnswers = { ...prev, [qId]: val };
+        answersRef.current = newAnswers;
+        return newAnswers;
+    })
   }
 
-  const toggleMark = (qId: number) => {
-    setMarkedQuestions(prev => prev.includes(qId) ? prev.filter(id => id !== qId) : [...prev, qId])
+  // ✅ [핵심 수정] 제출 로직: 점수 계산 후 즉시 모달 오픈 + 스크롤 잠금 해제 준비
+  const handleSubmit = async (force = false) => {
+    if (!force && !confirm("정말 제출하시겠습니까? 제출 후에는 수정할 수 없습니다.")) return;
+    
+    try {
+      const currentAnswers = answersRef.current; 
+      let earnedScore = 0;
+      let totalScore = 0;
+      let correctCnt = 0;
+      
+      // 1. 점수 계산 (동기 처리)
+      testData.questions.forEach((q: any) => {
+        totalScore += q.score;
+        let isCorrect = false;
+        
+        if (q.type === 'TEXT') {
+            if (currentAnswers[q.id]?.trim() === q.correctAnswer?.trim()) isCorrect = true;
+        } else {
+            if (currentAnswers[q.id] === q.correctAnswer) isCorrect = true;
+        }
+
+        if (isCorrect) {
+            earnedScore += q.score;
+            correctCnt++;
+        }
+      });
+      
+      const finalStats = {
+          earned: earnedScore,
+          total: totalScore,
+          correctCount: correctCnt,
+          wrongCount: testData.questions.length - correctCnt
+      };
+
+      // 2. 상태 업데이트 (순서 중요)
+      setResultStats(finalStats);
+      setStatus('submitted'); // 이 시점에 화면에 정답/오답 표시됨
+      
+      // 3. 모달 강제 오픈 (약간의 딜레이를 주어 렌더링 꼬임 방지)
+      setTimeout(() => {
+        setShowResultModal(true);
+      }, 100);
+      
+      // 4. 서버 전송
+      const payload = {
+        userId: currentUser.id,      
+        studentName: currentUser.name || "Unknown", 
+        answers: currentAnswers, 
+        timeTaken: formatTime(testData.timeLimit * 60 - timeLeft) 
+      }
+      
+      await fetch(`/api/tests/${id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    } catch (error) { console.error(error) }
   }
 
-  const scrollToQuestion = (qId: number) => {
-    questionRefs.current[qId]?.scrollIntoView({ behavior: "smooth", block: "center" })
-    setIsMobileOMROpen(false)
+  // --- 렌더링 ---
+  if (status === 'loading' || !testData) {
+    return <div className="fixed inset-0 z-[9999] bg-slate-50 flex items-center justify-center"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-600"></div></div>
   }
 
-  const progress = (Object.keys(answers).length / EXAM_DATA.questions.length) * 100
-
-  const preventCopy = (e: React.SyntheticEvent) => {
-    e.preventDefault();
-  }
+  const objCount = testData ? testData.questions.filter((q: any) => q.type === 'CHOICE').length : 0
+  const subjCount = testData ? testData.questions.filter((q: any) => q.type === 'TEXT').length : 0
+  const totalMaxScore = testData ? testData.questions.reduce((acc: number, q: any) => acc + (q.score || 0), 0) : 0
 
   return (
+    // ✅ [수정] overflow-hidden을 제거하고 flex 구조로 내부 스크롤 제어 (전체 스크롤 잠금 문제 해결)
     <div 
-      className={cn("fixed inset-0 z-50 bg-[#F8F9FC] dark:bg-slate-950 selection:bg-transparent overflow-y-auto select-none", inter.className)}
-      onContextMenu={preventCopy}
-      onCopy={preventCopy}
-      onCut={preventCopy}
+      className="fixed inset-0 z-[9999] bg-slate-50 dark:bg-slate-950 flex flex-col select-none font-sans"
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onCut={(e) => e.preventDefault()}
+      onPaste={(e) => e.preventDefault()}
     >
       
-      <header className="fixed top-0 left-0 right-0 z-[60] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
-        <div className="h-16 px-4 md:px-8 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <div className={cn(
-                    "flex items-center gap-2 px-3 py-1.5 rounded-lg font-mono text-base md:text-lg font-bold border transition-colors",
-                    timeLeft < 300 
-                        ? "bg-red-50 text-red-600 border-red-100 animate-pulse" 
-                        : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700"
-                )}>
-                    <Clock className="w-4 h-4" />
-                    {formatTime(timeLeft)}
-                </div>
-                <h1 className="hidden md:block font-bold text-slate-800 dark:text-white truncate max-w-[300px]">
-                    {EXAM_DATA.title}
-                </h1>
-            </div>
-
-            <div className="flex items-center gap-2 md:gap-4">
-                <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="lg:hidden"
-                    onClick={() => setIsMobileOMROpen(!isMobileOMROpen)}
-                >
-                    <LayoutGrid className="w-4 h-4 mr-1"/>
-                    <span className="text-xs">{Object.keys(answers).length}/{EXAM_DATA.questions.length}</span>
-                </Button>
-                <Button className="bg-slate-900 hover:bg-violet-600 text-white rounded-lg px-4 md:px-6 font-bold text-sm md:text-base shadow-md transition-all">
-                    제출
-                </Button>
-            </div>
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-100 dark:bg-slate-800">
-             <div 
-                className="h-full bg-violet-600 transition-all duration-500 ease-out" 
-                style={{ width: `${progress}%` }}
-            />
-        </div>
-      </header>
-
-      <div className="h-16" />
-
-      {/* 메인 컨텐츠 */}
-      <div className="max-w-[1400px] mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* 문제 리스트 */}
-        <div className="lg:col-span-9 space-y-8 md:space-y-12 pb-20">
-          {EXAM_DATA.questions.map((q, idx) => (
-            <div 
-              key={q.id} 
-              //ref={el => questionRefs.current[q.id] = el}
-              className="group relative bg-white dark:bg-slate-900 rounded-2xl md:rounded-[2rem] p-5 md:p-10 transition-all border border-slate-100 dark:border-slate-800 shadow-sm"
-            >
-              <div className="flex items-start justify-between mb-4 md:mb-6">
-                <div className="flex gap-3 md:gap-4">
-                    <span className="text-2xl md:text-3xl font-black text-slate-200 dark:text-slate-700 leading-none select-none mt-1">
-                        {String(idx + 1).padStart(2, '0')}
-                    </span>
-                    <div>
-                        <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-0 text-[10px] md:text-xs">
-                                {q.type === 'CHOICE' ? '객관식' : '주관식'}
-                            </Badge>
-                            <span className="text-xs md:text-sm font-semibold text-slate-400">{q.score}점</span>
-                        </div>
-                        {/* ✅ [수정] 문제 제목 크기 확대 */}
-                        <h3 className={cn("text-xl md:text-3xl font-bold text-slate-800 dark:text-slate-100 leading-snug", lora.className)}>
-                            {q.text}
-                        </h3>
+      {/* === 1. 대기실 / 입장 / 종료 화면 === */}
+      {(status === 'waiting' || status === 'intro' || status === 'ended') && (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-50 dark:bg-slate-950 overflow-y-auto">
+            <Card className="w-full max-w-[440px] border-0 shadow-xl shadow-slate-200/60 dark:shadow-none bg-white dark:bg-slate-900 rounded-[2rem] overflow-hidden">
+                <div className="bg-gradient-to-b from-violet-50/50 to-white dark:from-slate-800/50 dark:to-slate-900 p-8 text-center pb-6">
+                    <Badge variant="secondary" className="mb-4 bg-white shadow-sm text-violet-600 border border-violet-100 hover:bg-white px-3 py-1.5 text-xs font-bold rounded-full">
+                        {status === 'ended' ? "시험 종료" : "Online Test"}
+                    </Badge>
+                    <h1 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight mb-2 leading-snug">
+                        {testData.title}
+                    </h1>
+                    <div className="flex items-center justify-center gap-2 mt-3 text-sm text-slate-500">
+                        <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-xs font-bold">수험자</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">{currentUser?.name}</span>
                     </div>
                 </div>
-                
-                <Button 
-                    variant="ghost" 
-                    size="icon"
-                    onClick={() => toggleMark(q.id)}
-                    className={cn(
-                        "rounded-full shrink-0",
-                        markedQuestions.includes(q.id) ? "bg-orange-50 text-orange-500" : "text-slate-300"
+
+                <div className="p-8 pt-2 space-y-6">
+                    {status === 'ended' ? (
+                        <div className="text-center py-8">
+                            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Lock className="w-6 h-6 text-slate-400" />
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-600 dark:text-slate-300">시험이 종료되었습니다.</h3>
+                        </div>
+                    ) : status === 'waiting' ? (
+                        <div className="text-center py-6">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Starts in</span>
+                            <div className="text-6xl font-black font-mono text-violet-600 dark:text-violet-400 tracking-tighter">
+                                {formatTime(timeUntilStart)}
+                            </div>
+                        </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl flex flex-col items-center justify-center border border-slate-100 dark:border-slate-700">
+                            <span className="text-[10px] text-slate-400 font-bold mb-1 uppercase tracking-wide">Questions</span>
+                            <span className="text-xl font-black text-slate-800 dark:text-white">{objCount + subjCount}</span>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl flex flex-col items-center justify-center border border-slate-100 dark:border-slate-700">
+                            <span className="text-[10px] text-slate-400 font-bold mb-1 uppercase tracking-wide">Time Limit</span>
+                            <span className="text-xl font-black text-violet-600 dark:text-violet-400">{testData.timeLimit}<span className="text-sm font-medium ml-1">min</span></span>
+                        </div>
+                    </div>
+
+                    {status === 'intro' && (
+                        <div className="bg-amber-50/60 dark:bg-amber-900/10 p-4 rounded-2xl border border-amber-100/50 dark:border-amber-900/20 text-center">
+                            <p className="text-xs font-medium text-amber-700 dark:text-amber-500 leading-relaxed">
+                                시험 시작 후 <span className="font-bold">종료 시간</span>이 되면<br/>자동으로 답안이 제출됩니다.
+                            </p>
+                        </div>
                     )}
-                >
-                    <Bookmark className={cn("w-5 h-5 md:w-6 md:h-6", markedQuestions.includes(q.id) && "fill-current")} />
-                </Button>
-              </div>
 
-              {q.content && (
-                <div className="bg-[#F8F9FC] dark:bg-slate-800/50 p-6 md:p-10 rounded-xl md:rounded-2xl mb-6 md:mb-8 border border-slate-100 dark:border-slate-800">
-                    {/* ✅ [수정] 지문 글씨 크기 대폭 확대 (text-xl ~ 2xl) */}
-                    <p className={cn("text-xl md:text-2xl text-slate-800 dark:text-slate-300 leading-loose", lora.className)}>
-                        {q.content}
-                    </p>
-                </div>
-              )}
-
-              <div className="pl-0 md:pl-10">
-                {q.type === 'CHOICE' ? (
-                    <div className="grid gap-2 md:gap-3">
-                        {q.options?.map((opt, i) => {
-                            const isSelected = answers[q.id] === String(i + 1)
-                            return (
-                                <div 
-                                    key={i}
-                                    onClick={() => handleAnswer(q.id, String(i + 1))}
+                    <div className="pt-2">
+                        {status === 'ended' ? (
+                            <Button onClick={() => router.push('/dashboard/test')} variant="outline" className="h-14 w-full font-bold rounded-2xl">
+                                목록으로 돌아가기
+                            </Button>
+                        ) : (
+                            <div className="flex flex-col gap-3">
+                                <Button 
+                                    onClick={() => setStatus('taking')} 
+                                    disabled={status === 'waiting'}
                                     className={cn(
-                                        "flex items-center gap-3 md:gap-4 p-4 md:p-5 rounded-xl cursor-pointer border-2 transition-all active:scale-[0.99]",
-                                        isSelected 
-                                            ? "border-violet-600 bg-violet-50/50 dark:bg-violet-900/20 shadow-sm" 
-                                            : "border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50"
+                                        "h-14 w-full text-lg font-bold rounded-2xl transition-all shadow-lg shadow-violet-200/50 dark:shadow-none",
+                                        status === 'waiting' 
+                                            ? "bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-600 shadow-none" 
+                                            : "bg-violet-600 hover:bg-violet-700 text-white hover:scale-[1.02]"
                                     )}
                                 >
-                                    <div className={cn(
-                                        "w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center text-sm md:text-base font-bold border shrink-0",
-                                        isSelected 
-                                            ? "bg-violet-600 border-violet-600 text-white" 
-                                            : "bg-white border-slate-300 text-slate-500"
-                                    )}>
-                                        {i + 1}
-                                    </div>
-                                    {/* ✅ [수정] 보기 텍스트 크기도 조금 키움 */}
-                                    <span className={cn(
-                                        "text-lg md:text-xl font-medium",
-                                        lora.className,
-                                        isSelected ? "text-violet-900 dark:text-violet-100" : "text-slate-600 dark:text-slate-300"
-                                    )}>
-                                        {opt}
-                                    </span>
-                                </div>
-                            )
-                        })}
+                                    {status === 'waiting' ? "입장 대기" : "시험 시작하기"}
+                                </Button>
+                                <Button variant="ghost" onClick={() => router.back()} className="h-12 w-full text-slate-400 font-medium hover:text-slate-600 rounded-2xl hover:bg-slate-100">
+                                    나가기
+                                </Button>
+                            </div>
+                        )}
                     </div>
-                ) : (
-                    <div className="relative">
-                        <Textarea 
-                            value={answers[q.id] || ""}
-                            onChange={(e) => handleAnswer(q.id, e.target.value)}
-                            className="min-h-[120px] md:min-h-[160px] text-lg md:text-xl p-4 md:p-6 rounded-xl md:rounded-2xl border-slate-200 bg-slate-50 focus:bg-white focus:border-violet-500 transition-all resize-none"
-                            placeholder="이곳에 답안을 서술하시오..."
-                        />
-                        <div className="absolute bottom-3 right-3 text-xs md:text-sm text-slate-400 font-medium">
-                            {(answers[q.id] || "").length}자 입력됨
+                </div>
+            </Card>
+        </div>
+      )}
+
+      {/* === 2. 시험 응시 화면 === */}
+      {(status === 'taking' || status === 'submitted') && (
+        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950">
+            {/* 헤더 */}
+            <header className="h-[68px] bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200/60 dark:border-slate-800 flex items-center justify-between px-4 md:px-8 shrink-0 sticky top-0 z-50">
+                <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-violet-600 text-white rounded-xl shadow-md shadow-violet-200 dark:shadow-none flex items-center justify-center font-bold text-sm">Q</div>
+                    <h1 className="font-bold text-slate-800 dark:text-white truncate max-w-[120px] md:max-w-md text-sm md:text-base">{testData.title}</h1>
+                </div>
+                
+                <div className="flex items-center gap-4">
+                    <div className="flex flex-col items-end md:flex-row md:items-center gap-0.5 md:gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">종료 시간</span>
+                        <span className="text-xs md:text-sm font-bold font-mono text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                             {new Date(testData.endDate).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                        </span>
+                    </div>
+                    {/* 타이머 */}
+                    <div className={cn(
+                        "h-9 px-3 rounded-lg flex items-center gap-1.5 font-mono text-lg font-bold tabular-nums transition-colors", 
+                        timeLeft < 300 
+                            ? "bg-red-50 text-red-500 border border-red-100 animate-pulse" 
+                            : "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-md shadow-slate-200 dark:shadow-none"
+                    )}>
+                        {timeLeft < 300 && <Clock className="w-3.5 h-3.5" />}
+                        {formatTime(timeLeft)}
+                    </div>
+                </div>
+            </header>
+
+            {/* 메인 컨텐츠 */}
+            <div className="flex-1 overflow-hidden relative flex flex-col">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+                    
+                    {/* 컨텐츠 영역 */}
+                    <div className="flex-1 overflow-hidden relative bg-slate-50 dark:bg-slate-950">
+                        <div className="h-full w-full max-w-4xl mx-auto bg-white dark:bg-slate-950 shadow-sm md:border-x md:border-slate-200/50 dark:md:border-slate-800">
+                            
+                            <TabsContent value="paper" className="h-full overflow-y-auto m-0 p-4 md:p-8 scrollbar-hide">
+                                {testData.examPapers?.length > 0 ? (
+                                    <div className="space-y-4 pb-20">
+                                        <div className="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold text-center mb-2 flex items-center justify-center gap-2">
+                                            <Maximize2 className="w-3 h-3"/> 이미지를 클릭하면 크게 볼 수 있습니다
+                                        </div>
+                                        {testData.examPapers.map((img: string, idx: number) => (
+                                            <div 
+                                                key={idx} 
+                                                className="group relative bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm cursor-zoom-in hover:shadow-md transition-all"
+                                                onClick={() => setExpandedImage(img)}
+                                            >
+                                                <img src={img} alt={`page-${idx+1}`} className="w-full rounded-lg" />
+                                                <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl flex items-center justify-center pointer-events-none">
+                                                    <div className="bg-white/90 text-slate-800 px-3 py-1.5 rounded-full text-sm font-bold shadow-sm flex items-center gap-2">
+                                                        <Maximize2 className="w-4 h-4"/> 확대하기
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
+                                        <FileImage className="w-10 h-10 opacity-20" />
+                                        <span>등록된 시험지가 없습니다.</span>
+                                    </div>
+                                )}
+                            </TabsContent>
+                            
+                            <TabsContent value="omr" className="h-full overflow-y-auto m-0 p-4 md:p-8 scrollbar-hide">
+                                <div className="sticky top-0 z-10 bg-white/95 dark:bg-slate-950/95 backdrop-blur py-2 mb-2 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                                    <h2 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
+                                        <span className="w-1 h-5 bg-violet-500 rounded-full inline-block"></span>
+                                        답안 작성
+                                    </h2>
+                                    <div className="text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+                                        진행률: <span className="text-violet-600 font-bold">{Object.keys(answers).length}</span> / {testData.questions.length}
+                                    </div>
+                                </div>
+                                <div className="pb-24 pt-2">
+                                    <OMRSheet questions={testData.questions} answers={answers} handleAnswer={handleAnswer} status={status} />
+                                </div>
+                            </TabsContent>
+
                         </div>
                     </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* PC용 OMR */}
-        <div className="hidden lg:block lg:col-span-3">
-          <div className="sticky top-24 space-y-6">
-            <OMRCard 
-                questions={EXAM_DATA.questions} 
-                answers={answers} 
-                marked={markedQuestions} 
-                progress={progress}
-                onScroll={scrollToQuestion} 
-            />
-            {/* ❌ 초기화 버튼 삭제됨 */}
-          </div>
-        </div>
-
-      </div>
-
-      {/* 모바일 OMR Drawer */}
-      {isMobileOMROpen && (
-        <div className="fixed inset-0 z-[70] lg:hidden">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setIsMobileOMROpen(false)} />
-            <div className="absolute bottom-0 left-0 right-0 bg-white dark:bg-slate-900 rounded-t-3xl p-6 shadow-2xl animate-in slide-in-from-bottom-full duration-300">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-bold text-lg flex items-center gap-2">답안 표기란</h3>
-                    <Button variant="ghost" size="icon" onClick={() => setIsMobileOMROpen(false)}>
-                        <X className="w-5 h-5"/>
-                    </Button>
-                </div>
-                <div className="max-h-[60vh] overflow-y-auto">
-                    <OMRCard 
-                        questions={EXAM_DATA.questions} 
-                        answers={answers} 
-                        marked={markedQuestions} 
-                        progress={progress}
-                        onScroll={scrollToQuestion} 
-                        isMobile={true}
-                    />
-                </div>
+                    
+                    {/* 하단 탭 바 */}
+                    <div className="shrink-0 h-[72px] bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 z-50 flex items-center justify-center px-4 pb-2">
+                        <div className="w-full max-w-4xl flex gap-4 items-center h-full pt-2">
+                            <TabsList className="flex-1 h-12 grid grid-cols-2 bg-slate-100/80 dark:bg-slate-900 p-1 rounded-xl">
+                                <TabsTrigger value="paper" className="rounded-lg text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-violet-600 data-[state=active]:shadow-sm transition-all text-slate-500">
+                                    <FileImage className="w-4 h-4 mr-1.5" /> 시험지
+                                </TabsTrigger>
+                                <TabsTrigger value="omr" className="rounded-lg text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:text-violet-600 data-[state=active]:shadow-sm transition-all text-slate-500">
+                                    <ListChecks className="w-4 h-4 mr-1.5" /> 답안지
+                                </TabsTrigger>
+                            </TabsList>
+                            
+                            {status !== 'submitted' ? (
+                                <Button onClick={() => handleSubmit(false)} className="h-12 px-6 bg-violet-600 hover:bg-violet-700 text-white font-bold shrink-0 rounded-xl shadow-lg shadow-violet-200 dark:shadow-none hover:-translate-y-0.5 transition-all">
+                                    제출
+                                </Button>
+                            ) : (
+                                <Button onClick={() => router.push('/dashboard/test')} variant="outline" className="h-12 px-6 shrink-0 font-bold rounded-xl border-slate-300">
+                                    나가기
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                </Tabs>
             </div>
         </div>
       )}
-      
+
+      {/* 이미지 확대 모달 */}
+      {expandedImage && (
+        <div 
+            className="fixed inset-0 z-[10000] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 cursor-zoom-out"
+            onClick={() => setExpandedImage(null)}
+        >
+            <button 
+                onClick={() => setExpandedImage(null)}
+                className="absolute top-4 right-4 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 p-2 rounded-full transition-all z-50"
+            >
+                <X className="w-8 h-8" />
+            </button>
+            <img 
+                src={expandedImage} 
+                alt="Expanded Exam Paper" 
+                className="max-w-full max-h-full w-auto h-auto object-contain rounded shadow-2xl animate-in zoom-in-95 duration-200"
+                onClick={(e) => e.stopPropagation()}
+            />
+        </div>
+      )}
+
+      {/* 📊 [결과 모달] z-index를 최상위로 설정하여 무조건 보이게 함 */}
+      <Dialog 
+        open={showResultModal} 
+        onOpenChange={(open) => {
+            setShowResultModal(open);
+            // 🔓 다이얼로그 닫힐 때 스크롤 잠금 강제 해제 (Radix UI 버그 방지)
+            if (!open) {
+                document.body.style.pointerEvents = 'auto';
+                document.body.style.overflow = 'auto';
+            }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm text-center p-0 bg-white dark:bg-slate-900 rounded-[2rem] border-0 shadow-2xl overflow-hidden z-[10002]">
+            <div className="p-8 pb-6">
+                <DialogHeader>
+                    <div className="mx-auto bg-violet-50 text-violet-600 w-16 h-16 rounded-2xl rotate-3 flex items-center justify-center mb-5 ring-4 ring-white shadow-lg shadow-violet-100">
+                        {isTimeOver ? <Timer className="w-8 h-8"/> : <Trophy className="w-8 h-8" />}
+                    </div>
+                    <DialogTitle className="text-2xl font-black text-slate-900 dark:text-white">
+                        {isTimeOver ? "시간 종료!" : "제출 완료"}
+                    </DialogTitle>
+                    <DialogDescription className="text-slate-500 text-sm mt-2 font-medium">
+                        시험이 종료되었습니다.<br/>결과를 확인해주세요.
+                    </DialogDescription>
+                </DialogHeader>
+
+                {/* 결과 통계 카드 */}
+                <div className="mt-6 space-y-3">
+                    {/* 총점 */}
+                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Total Score</div>
+                        <div className="flex items-baseline justify-center gap-1">
+                            <span className="text-5xl font-black text-slate-900 dark:text-white tracking-tighter">{resultStats.earned}</span>
+                            <span className="text-lg text-slate-300 font-bold">/ {resultStats.total}</span>
+                        </div>
+                    </div>
+                    
+                    {/* 정답/오답 개수 */}
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-green-50/50 dark:bg-green-900/10 p-3 rounded-xl border border-green-100 dark:border-green-900/20">
+                            <div className="flex items-center justify-center gap-1 text-green-600 mb-1">
+                                <CheckCircle2 className="w-4 h-4" /> <span className="text-xs font-bold">맞은 문제</span>
+                            </div>
+                            <span className="text-2xl font-black text-slate-800 dark:text-white">{resultStats.correctCount}</span>
+                        </div>
+                        <div className="bg-red-50/50 dark:bg-red-900/10 p-3 rounded-xl border border-red-100 dark:border-red-900/20">
+                            <div className="flex items-center justify-center gap-1 text-red-500 mb-1">
+                                <AlertCircle className="w-4 h-4" /> <span className="text-xs font-bold">틀린 문제</span>
+                            </div>
+                            <span className="text-2xl font-black text-slate-800 dark:text-white">{resultStats.wrongCount}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* 하단 버튼 (선택지) */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2.5">
+                <Button onClick={() => { setShowResultModal(false); setActiveTab('omr'); }} className="w-full h-12 font-bold bg-slate-900 text-white hover:bg-slate-800 rounded-xl shadow-md flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" /> 오답 확인하기
+                </Button>
+                <Button variant="outline" onClick={() => router.push('/dashboard/test')} className="w-full h-12 font-bold text-slate-500 hover:text-slate-700 hover:bg-white border-slate-200 rounded-xl flex items-center gap-2">
+                    <Home className="w-4 h-4" /> 목록으로 나가기
+                </Button>
+            </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
-function OMRCard({ questions, answers, marked, progress, onScroll, isMobile = false }: any) {
+function OMRSheet({ questions, answers, handleAnswer, status }: any) {
     return (
-        <div className={cn(
-            "bg-white dark:bg-slate-900 border-slate-200/60 dark:border-slate-800 overflow-hidden",
-            !isMobile && "rounded-3xl border shadow-xl shadow-slate-200/50 dark:shadow-none"
-        )}>
-            {!isMobile && (
-                <div className="p-6 bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
-                    <h3 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                        <LayoutGrid className="w-5 h-5 text-violet-500"/>
-                        답안 표기란
-                    </h3>
-                    <div className="flex justify-between items-center mt-2 text-sm">
-                        <span className="text-slate-500">진행률</span>
-                        <span className="font-bold text-violet-600">{Math.round(progress)}%</span>
-                    </div>
-                </div>
-            )}
+        <div className="space-y-4">
+            {questions.map((q: any, idx: number) => {
+                const isCorrect = status === 'submitted' && (
+                    q.type === 'TEXT' 
+                        ? answers[q.id]?.trim() === q.correctAnswer?.trim()
+                        : answers[q.id] === q.correctAnswer
+                )
+                const isWrong = status === 'submitted' && !isCorrect
 
-            <div className={cn("grid grid-cols-5 gap-3", !isMobile && "p-6")}>
-                {questions.map((q: any, i: number) => {
-                    const isDone = answers[q.id]
-                    const isMarked = marked.includes(q.id)
-                    return (
-                        <button
-                            key={q.id}
-                            onClick={() => onScroll(q.id)}
-                            className={cn(
-                                "relative h-10 w-10 rounded-xl text-sm font-bold transition-all duration-200 active:scale-95",
-                                isMarked 
-                                    ? "bg-orange-100 text-orange-600 border-2 border-orange-400" 
-                                    : isDone 
-                                        ? "bg-violet-600 text-white" 
-                                        : "bg-slate-100 dark:bg-slate-800 text-slate-400"
-                            )}
-                        >
-                            {i + 1}
-                            {isMarked && (
-                                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500"></span>
+                return (
+                    <div key={q.id} className={cn(
+                        "flex flex-col gap-3 p-5 rounded-2xl border-2 transition-all duration-300 bg-white dark:bg-slate-900",
+                        isCorrect ? "border-green-500 shadow-sm" :
+                        isWrong ? "border-red-500 shadow-sm" :
+                        "border-slate-100 dark:border-slate-800 shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)]"
+                    )}>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className={cn(
+                                    "w-8 h-8 flex items-center justify-center rounded-lg text-sm font-black shrink-0 transition-colors",
+                                    status === 'submitted' 
+                                        ? (isCorrect ? "bg-green-500 text-white" : "bg-red-500 text-white") 
+                                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                )}>
+                                    {idx + 1}
+                                </div>
+                                <span className="text-xs font-bold text-slate-400 bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded-md">{q.score}점</span>
+                            </div>
+                            {status === 'submitted' && (
+                                <span className={cn("text-xs font-bold px-2 py-1 rounded-md", isCorrect ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600")}>
+                                    {isCorrect ? "정답" : "오답"}
                                 </span>
                             )}
-                        </button>
-                    )
-                })}
-            </div>
-            
-            <div className={cn("mt-4 grid grid-cols-2 gap-2 text-xs font-medium text-slate-500", !isMobile && "p-4 bg-slate-50 border-t")}>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-violet-600"/> 작성완료</div>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-slate-200"/> 미작성</div>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-orange-400"/> 검토필요</div>
-            </div>
+                        </div>
+
+                        <div className="pl-1 pt-1">
+                            {q.type === 'CHOICE' ? (
+                                <div className="flex justify-between gap-2">
+                                    {[1, 2, 3, 4, 5].map((num) => {
+                                        const numStr = String(num)
+                                        const isSelected = answers[q.id] === numStr
+                                        const isAns = q.correctAnswer === numStr
+
+                                        let btnClass = "bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-700 text-slate-400 hover:border-violet-300 hover:text-violet-500"
+                                        
+                                        if (status === 'submitted') {
+                                            if (isAns) btnClass = "bg-green-500 border-green-500 text-white" 
+                                            else if (isSelected) btnClass = "bg-red-500 border-red-500 text-white"
+                                            else btnClass = "opacity-30 border-slate-100"
+                                        } else {
+                                            if (isSelected) btnClass = "bg-violet-600 border-violet-600 text-white shadow-md shadow-violet-200 ring-2 ring-violet-100"
+                                        }
+
+                                        return (
+                                            <button
+                                                key={num}
+                                                onClick={() => handleAnswer(q.id, numStr)}
+                                                disabled={status === 'submitted'}
+                                                className={cn("flex-1 h-11 rounded-xl border-2 text-sm font-bold transition-all duration-200 active:scale-95", btnClass)}
+                                            >
+                                                {num}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="relative">
+                                    <Input 
+                                        value={answers[q.id] || ""}
+                                        onChange={(e) => handleAnswer(q.id, e.target.value)}
+                                        disabled={status === 'submitted'}
+                                        placeholder="정답 입력"
+                                        className={cn(
+                                            "h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 font-bold text-base px-4 focus-visible:ring-violet-500 rounded-xl",
+                                            status === 'submitted' && isCorrect && "border-green-500 text-green-700 bg-green-50",
+                                            status === 'submitted' && isWrong && "border-red-500 text-red-600 bg-red-50"
+                                        )}
+                                    />
+                                    {isWrong && (
+                                        <div className="flex items-center gap-2 mt-2 text-xs font-bold text-green-600 bg-green-50 px-3 py-2 rounded-lg border border-green-100">
+                                            <CheckCircle2 className="w-3 h-3"/> 정답: {q.correctAnswer}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )
+            })}
         </div>
     )
 }

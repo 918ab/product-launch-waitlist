@@ -7,14 +7,15 @@ import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { 
   Home, BookOpen, FolderOpen, Video, MessageCircle, LogOut, Bell, User, Sun, Moon,
-  Users, FileText, ShieldCheck, Loader2
+  Users, FileText, ShieldCheck, Loader2,
+  PenTool, CalendarDays // ✅ [추가] 시험 관련 아이콘 추가
 } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Toaster } from "@/components/ui/toaster"
 import {
   SidebarProvider, Sidebar, SidebarContent, SidebarMenu, SidebarMenuItem,
   SidebarMenuButton, SidebarFooter, SidebarTrigger, SidebarInset,
-  useSidebar // [핵심] 사이드바 제어 훅 추가
+  useSidebar
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
 
@@ -22,6 +23,7 @@ import { Button } from "@/components/ui/button"
 const sidebarItems = [
   { name: "메인홈", href: "/dashboard", icon: Home },
   { name: "공지사항", href: "/dashboard/notices", icon: Bell },
+  { name: "시험 응시", href: "/dashboard/test", icon: PenTool }, // ✅ [추가] 학생 시험 페이지
   { name: "컨텐츠소개", href: "/dashboard/contents", icon: BookOpen },
   { name: "자료실", href: "/dashboard/resources", icon: FolderOpen },
   { name: "복습영상", href: "/dashboard/videos", icon: Video },
@@ -31,6 +33,7 @@ const sidebarItems = [
 // 2. 관리자용 메뉴
 const adminItems = [
   { name: "회원 관리", href: "/dashboard/admin/users", icon: Users },
+  { name: "시험 일정 관리", href: "/dashboard/admin/test", icon: CalendarDays }, // ✅ [추가] 관리자 시험 관리 페이지
   { name: "학습 관리", href: "/dashboard/admin/contents", icon: FileText },
   { name: "Q&A 관리", href: "/dashboard/admin/qna", icon: MessageCircle }, 
 ]
@@ -40,14 +43,12 @@ function DashboardSidebarContent({ user, isAdmin, handleLogout }: any) {
   const { setTheme, theme } = useTheme()
   const [mounted, setMounted] = useState(false)
   
-  // [핵심] 사이드바 상태 제어 훅 가져오기
   const { isMobile, setOpenMobile } = useSidebar()
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // [핵심] 모바일에서 링크 클릭 시 사이드바 닫는 함수
   const handleLinkClick = () => {
     if (isMobile) {
       setOpenMobile(false)
@@ -60,13 +61,15 @@ function DashboardSidebarContent({ user, isAdmin, handleLogout }: any) {
         {/* 학생용 메뉴 그룹 */}
         <SidebarMenu>
           {sidebarItems.map((item) => {
-            const isActive = pathname === item.href
+            // 하위 경로까지 포함해서 활성화 (예: /dashboard/test/take/... 도 활성화)
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href))
+            
             return (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
                   isActive={isActive}
-                  onClick={handleLinkClick} // [추가] 클릭 시 닫기
+                  onClick={handleLinkClick}
                   className={cn(
                     "h-10 transition-colors",
                     isActive 
@@ -99,7 +102,7 @@ function DashboardSidebarContent({ user, isAdmin, handleLogout }: any) {
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
-                      onClick={handleLinkClick} // [추가] 클릭 시 닫기
+                      onClick={handleLinkClick}
                       className={cn(
                         "h-10 transition-colors",
                         isActive 
